@@ -5,6 +5,7 @@ import { BootScene } from './scenes/BootScene';
 import { WorldScene } from './scenes/WorldScene';
 import { HudScene } from './scenes/HudScene';
 import { session, type CharacterDto } from './api';
+import { mountChat } from './chat';
 import { clearUI, logout, showCharacterSelect, showLogin } from './ui';
 export const FONT = '"DotGothic16", sans-serif';
 
@@ -23,6 +24,7 @@ function enterWorld(c: CharacterDto) {
   clearUI();
   const hud = document.createElement('div'); hud.id = 'hudbar'; hud.innerHTML = '<button id="logout">ログアウト</button>';
   document.getElementById('ui')!.appendChild(hud);
+  mountChat(document.getElementById('ui')!, c.name);
   hud.querySelector('button')!.onclick = () => { game.scene.stop('World'); game.scene.stop('Hud'); logout(enterWorld); };
   game.scene.start('World', { character: c });
   game.scene.start('Hud', { character: c });

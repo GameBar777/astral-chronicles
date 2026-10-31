@@ -28,6 +28,7 @@ npm run dev:client          # Vite :5173
 npm test                         # shared(ユニット) + server(DBスキーマ, 起動)
 npm run build                    # 全パッケージ型チェック+ビルド
 node client/e2e/phase2.mjs       # ブラウザE2E（dev:server + dev:client起動中、19項目）
+python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ client/public/sprites/*.png 再生成（TD-010）
 ```
 
 ## 環境変数

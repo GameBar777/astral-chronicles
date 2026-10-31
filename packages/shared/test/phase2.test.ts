@@ -32,7 +32,7 @@ describe('classes', () => {
 });
 describe('name validation', () => {
   it.each([['アルド', true], ['勇者タロウ', true], ['Hero01', true], ['ＨＥＲＯ', true], ['あ', false], ['あいうえおかきくけこさしす', false],
-    ['hero!', false], ['he ro', false], ['12345', false], ['GameMaster', false], ['運営さん', false], ['<script>', false], ['', false], ['😀😀', false]])('%s -> %s', (n, ok) => {
+    ['hero!', false], ['he ro', false], ['12345', false], ['GameMaster', false], ['Sigma', true], ['Ogma', true], ['GM', false], ['GM2', false], ['Admin', false], ['システム君', false], ['運営さん', false], ['<script>', false], ['', false], ['😀😀', false]])('%s -> %s', (n, ok) => {
     expect(validateCharacterName(n).ok).toBe(ok);
   });
   it('normalizes fullwidth', () => { const r = validateCharacterName(' ＨＥＲＯ '); expect(r.ok && r.name).toBe('HERO'); });

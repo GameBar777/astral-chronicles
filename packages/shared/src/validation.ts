@@ -12,7 +12,9 @@ export function validateCharacterName(raw: unknown): { ok: true; name: string } 
   if (!ALLOWED.test(name)) return { ok: false, error: 'invalid_chars' };
   if (/^[0-9]+$/.test(name)) return { ok: false, error: 'digits_only' };
   const low = name.toLowerCase();
-  if (BANNED_WORDS.some((w) => low.includes(w))) return { ok: false, error: 'banned' };
+  // BUG-005: ASCII words match only as whole words (letter/digit boundaries); JP words match as substrings.
+  const hit = (w: string) => /^[a-z0-9]+$/.test(w) ? new RegExp(`(^|[^a-z])${w}($|[^a-z])`).test(low) : low.includes(w);
+  if (BANNED_WORDS.some(hit)) return { ok: false, error: 'banned' };
   return { ok: true, name };
 }
 export const APPEARANCE_LIMITS = { bodyType: ['a', 'b'], hairStyle: 4, hairColor: 6, skinColor: 4 } as const;

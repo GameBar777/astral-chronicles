@@ -61,6 +61,6 @@ export class WorldScene extends Phaser.Scene {
     this.walkT = dir ? this.walkT + dtMs : 0;
     const frame = dir ? [1, 0, 2, 0][Math.floor(this.walkT / 140) % 4] : 0;
     this.player.setPosition(Math.round(this.pos.x), Math.round(this.pos.y)).setFrame(DIR_INDEX[this.facing] * 3 + frame).setDepth(this.pos.y); // Y-sort by feet
-    this.nameTag.setPosition(Math.round(this.pos.x), Math.round(this.pos.y) - 50);
+    this.nameTag.setPosition(Math.round(this.pos.x), Math.round(this.pos.y) - 50).setDepth(this.pos.y + 0.2); // BUG-006: tag Y-sorted with its owner
   }
 }

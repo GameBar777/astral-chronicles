@@ -10,6 +10,7 @@ const FRAME: Record<string, number> = { down: 0, left: 1, right: 2, up: 3 };
 export const wsEndpoint = () => (import.meta as any).env?.VITE_GAME_WS ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:2567`;
 import { chatBus } from './chat';
 import { socialBus } from './social';
+import { dungeonBus } from './dungeonBus';
 type Remote = { spr: Phaser.GameObjects.Sprite; tag: Phaser.GameObjects.Text; tx: number; ty: number; facing: string; moving: boolean; t: number };
 export class Presence {
   room?: Room; remotes = new Map<string, Remote>(); status: 'connecting' | 'online' | 'reconnecting' | 'offline' = 'connecting';
@@ -28,12 +29,13 @@ export class Presence {
     $(room.state).players.onAdd((p: any, key: string) => {
       if (p.id === this.characterId) return;
       const r = this.remotes.get(key) ?? this.spawn(key, p); r.tx = p.x; r.ty = p.y;
-      const label = () => r.tag.setText(p.inBattle ? `⚔ ${p.name}` : p.name).setColor(p.inBattle ? '#ffb08a' : '#bfe6ff'); label();
+      const label = () => r.tag.setText(p.inBattle ? `[戦闘中] ${p.name}` : p.name).setColor(p.inBattle ? '#ffb08a' : '#bfe6ff'); label();
       $(p).onChange(() => { r.tx = p.x; r.ty = p.y; r.facing = p.facing; r.moving = p.moving; label(); });
     });
     $(room.state).players.onRemove((_p: any, key: string) => { const r = this.remotes.get(key); r?.spr.destroy(); r?.tag.destroy(); this.remotes.delete(key); });
     room.onMessage('chat', (m: any) => chatBus.onMsg(m)); room.onMessage('chat_history', (h: any) => chatBus.onHistory(h ?? []));
     room.onMessage('chat_error', (m: any) => chatBus.onError(m?.code)); room.onMessage('social', () => socialBus.refresh());
+    room.onMessage('dungeon', (m: any) => dungeonBus.onMsg?.(m)); room.onMessage('battle', () => {}); room.onMessage('battle_wait', () => {});
     chatBus.send = (channel, body) => { if (this.room !== room || this.status !== 'online') return false; room.send('chat', { channel, body }); return true; };
     room.onMessage('correct', (m: any) => m?.pos && this.onCorrect(m.pos));
     room.onLeave((code) => {

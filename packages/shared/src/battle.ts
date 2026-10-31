@@ -16,12 +16,14 @@ export const STATUS_DEFS: Record<StatusId, { name: string; turns: number; cure: 
   silence: { name: '沈黙', turns: 3, cure: 'ターン経過（スキル使用不可）' },
 };
 export const STATUS_IDS = Object.keys(STATUS_DEFS) as StatusId[];
-export interface EnemyAction { kind: 'attack' | 'skill'; weight: number; name?: string; mult?: number; magic?: boolean; inflict?: { status: StatusId; rate: number } }
+export interface EnemyAction { kind: 'attack' | 'skill'; weight: number; name?: string; mult?: number; magic?: boolean; inflict?: { status: StatusId; rate: number }; aoe?: boolean }
+/** Boss phase: entered once when HP ratio drops to `at` or below (checked after every hit). */
+export interface BossPhase { at: number; name: string; text: string; atkMul?: number; matkMul?: number; defMul?: number; actions?: EnemyAction[] }
 export interface Combatant {
   id: string; side: 'player' | 'enemy'; name: string; level: number; monsterId?: string; characterId?: string;
   hp: number; maxHp: number; mp: number; maxMp: number; atk: number; def: number; matk: number; mdef: number; agi: number; luk: number;
   element: string; weakTo?: string[]; statuses: { id: StatusId; turns: number }[]; defending: boolean; guardTurns: number;
-  actions?: EnemyAction[]; skills?: string[]; reward?: { exp: number; gold: number; drops: { itemId: string; rate: number; min: number; max: number }[] };
+  cls?: string; actions?: EnemyAction[]; skills?: string[]; phases?: BossPhase[]; phase?: number; reward?: { exp: number; gold: number; drops: { itemId: string; rate: number; min: number; max: number }[] };
 }
 export type Command =
   | { type: 'attack'; target: string } | { type: 'skill'; skillId: string; target?: string }
@@ -94,11 +96,12 @@ function pickEnemyAction(e: Combatant, rng: Rng): EnemyAction {
  * Resolve one full turn. `commands` must contain a command for every alive player combatant.
  * Returns the new state (input not mutated), this turn's events and consumed items.
  */
-export function resolveTurn(input: BattleState, commands: Record<string, Command>, rng: Rng, inv: Record<string, number> = {}) {
+export function resolveTurn(input: BattleState, commands: Record<string, Command>, rng: Rng, inv: Record<string, number> = {}, invBy?: Record<string, Record<string, number>>) {
   const s: BattleState = structuredClone(input);
-  const T = s.turn, ev: BattleEvent[] = [], consumed: string[] = [];
-  const invLeft = { ...inv };
-  for (const p of alive(s, 'player')) { if (!commands[p.id]) throw new BattleError('missing_command'); validateCommand(s, p.id, commands[p.id], invLeft); if (commands[p.id].type === 'item') invLeft[(commands[p.id] as any).itemId]--; }
+  const T = s.turn, ev: BattleEvent[] = [], consumed: string[] = [], consumedBy: { actor: string; itemId: string }[] = [];
+  const shared = { ...inv }; const invOf = (pid: string) => (invBy ? (invBy[pid] ??= {}) : shared); // party: each player's own bag
+  if (invBy) for (const k of Object.keys(invBy)) invBy[k] = { ...invBy[k] };
+  for (const p of alive(s, 'player')) { if (!commands[p.id]) throw new BattleError('missing_command'); const iv = invOf(p.id); validateCommand(s, p.id, commands[p.id], iv); if (commands[p.id].type === 'item') iv[(commands[p.id] as any).itemId]--; }
   const byId = (id?: string) => s.combatants.find((c) => c.id === id);
   const push = (e: Omit<BattleEvent, 'turn'>) => ev.push({ turn: T, ...e });
   const end = () => {
@@ -112,6 +115,17 @@ export function resolveTurn(input: BattleState, commands: Record<string, Command
     if (tgt.hp > 0 && has(tgt, 'sleep')) { tgt.statuses = tgt.statuses.filter((x) => x.id !== 'sleep'); push({ target: tgt.id, kind: 'status_end', status: 'sleep', text: `${tgt.name}は目を覚ました` }); }
     if (tgt.hp > 0 && has(tgt, 'confusion') && rng() < 0.5) { tgt.statuses = tgt.statuses.filter((x) => x.id !== 'confusion'); push({ target: tgt.id, kind: 'status_end', status: 'confusion', text: `${tgt.name}は正気に戻った` }); }
     if (tgt.hp <= 0) { tgt.statuses = []; push({ target: tgt.id, kind: 'ko', text: tgt.side === 'enemy' ? `${tgt.name}をたおした！` : `${tgt.name}は力尽きた…` }); }
+    else if (tgt.phases?.length) enterPhases(tgt);
+  };
+  /** boss phase transition (server-side, deterministic): stat multipliers + new action table */
+  const enterPhases = (b: Combatant) => {
+    for (let i = b.phase ?? 0; i < b.phases!.length; i++) {
+      const ph = b.phases![i]; if (b.hp / b.maxHp > ph.at) break;
+      b.phase = i + 1;
+      if (ph.atkMul) b.atk = Math.round(b.atk * ph.atkMul); if (ph.matkMul) b.matk = Math.round(b.matk * ph.matkMul); if (ph.defMul) b.def = Math.round(b.def * ph.defMul);
+      if (ph.actions) b.actions = ph.actions;
+      push({ actor: b.id, kind: 'phase', value: i + 2, text: ph.text });
+    }
   };
   const inflict = (tgt: Combatant, st: StatusId, rate: number) => {
     if (tgt.hp <= 0 || rng() >= rate) return;
@@ -139,8 +153,11 @@ export function resolveTurn(input: BattleState, commands: Record<string, Command
     if (a.side === 'enemy') {
       const act = pickEnemyAction(a, rng); const t = foes[Math.floor(rng() * foes.length)]; if (!t) break;
       const label = act.kind === 'skill' ? `${a.name}の${act.name}！` : `${a.name}の攻撃！`;
-      if (act.magic) magic(a, t, act.mult ?? 1, label); else physical(a, t, act.mult ?? 1, label);
-      if (act.inflict) inflict(t, act.inflict.status, act.inflict.rate);
+      for (const tt of act.aoe ? foes : [t]) { // aoe: hits every living player
+        if (tt.hp <= 0) continue;
+        if (act.magic) magic(a, tt, act.mult ?? 1, label); else physical(a, tt, act.mult ?? 1, label);
+        if (act.inflict) inflict(tt, act.inflict.status, act.inflict.rate);
+      }
       if (end()) break; continue;
     }
     const cmd = commands[a.id];
@@ -153,7 +170,7 @@ export function resolveTurn(input: BattleState, commands: Record<string, Command
       else if (sk.type === 'heal') { const t = byId(cmd.target)?.side === 'player' && byId(cmd.target)!.hp > 0 ? byId(cmd.target)! : a; const v = Math.max(1, Math.floor(eff(a, 'matk') * sk.power * rand(rng))); const before = t.hp; t.hp = Math.min(t.maxHp, t.hp + v); push({ actor: a.id, target: t.id, kind: 'heal', value: t.hp - before, text: `${a.name}の${sk.name}！ ${t.name}のHPが${t.hp - before}回復` }); }
       else { a.guardTurns = 2; a.defending = true; push({ actor: a.id, kind: 'guard', text: `${a.name}の${sk.name}！ 2ターンの間 被ダメージ半減` }); }
     } else if (cmd.type === 'item') {
-      const it = BATTLE_ITEMS[cmd.itemId]; consumed.push(cmd.itemId); const t = a;
+      const it = BATTLE_ITEMS[cmd.itemId]; consumed.push(cmd.itemId); consumedBy.push({ actor: a.id, itemId: cmd.itemId }); const t = a;
       if (it.heal) { const before = t.hp; t.hp = Math.min(t.maxHp, t.hp + it.heal); push({ actor: a.id, target: t.id, kind: 'heal', value: t.hp - before, text: `${a.name}は${it.name}を使った！ HPが${t.hp - before}回復` }); }
       if (it.cure) { t.statuses = t.statuses.filter((x) => !it.cure!.includes(x.id)); push({ actor: a.id, target: t.id, kind: 'cure', text: `${a.name}は${it.name}を使った！ 状態異常が治った` }); }
     } else if (cmd.type === 'flee') {
@@ -176,7 +193,7 @@ export function resolveTurn(input: BattleState, commands: Record<string, Command
   end();
   if (s.status !== 'active') push({ kind: 'end', text: { victory: '戦闘に勝利した！', defeat: '全滅してしまった…', fled: 'うまく逃げ切れた', active: '' }[s.status] });
   s.turn = T + 1; s.log.push(...ev);
-  return { state: s, events: ev, consumed };
+  return { state: s, events: ev, consumed, consumedBy };
 }
 /** Rewards are decided by the server from the defeated enemies (exp adjusted by level difference). */
 export function computeRewards(s: BattleState, playerLevel: number, rng: Rng) {

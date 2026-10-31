@@ -8,6 +8,7 @@ import { openInventory, closePanel, panelOpen, newRequestId } from '../panels';
 import { openDialog, openQuests } from '../npcpanels';
 import { Presence } from '../net';
 import { toggleSocial } from '../social';
+import { dungeonBus, confirmBox } from '../dungeonBus';
 const FACE4: Record<Direction, string> = { s: 'down', n: 'up', w: 'left', nw: 'left', sw: 'left', e: 'right', ne: 'right', se: 'right' };
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
@@ -37,8 +38,9 @@ export class WorldScene extends Phaser.Scene {
     return o.setScale(1 / z).setPosition(cx + (sx - cx) / z, cy + (sy - cy) / z);
   }
   constructor() { super('World'); }
-  create(data: { character: CharacterDto }) {
-    this.character = data.character;
+  create(data: { character: CharacterDto; note?: string }) {
+    this.character = data.character; this.inBattle = false;
+    if (data.note) this.time.delayedCall(400, () => this.toast(data.note!, '#3a2a6add'));
     // PHASE 4: map + position come from the server (characters.map_id/pos_x/pos_y); client only predicts movement
     this.map = MAPS[this.character.map_id] ?? MAPS.asteria; this.nodes = []; this.portalBusy = false;
     this.symbols = []; this.inBattle = false; this.cooldownUntil = this.time.now + 1500; this.spawnRect = undefined;
@@ -55,6 +57,15 @@ export class WorldScene extends Phaser.Scene {
       } else if (o.type === 'gather' && o.kind) {
         const img = this.add.image(o.x, o.y, `sp_${o.kind}`).setOrigin(0.5, 1).setDepth(o.y);
         this.nodes.push({ id: o.id, x: o.x, y: o.y, img, type: String(o.props?.gatherType) });
+      } else if (o.type === 'dungeon') { // PHASE 8 ruins entrance: boulders around a dark stairwell
+        const g = this.add.graphics().setDepth(o.y - 20);
+        g.fillStyle(0x3a3040, 1).fillEllipse(o.x, o.y - 12, 76, 34).fillStyle(0x0a0610, 1).fillEllipse(o.x, o.y - 12, 54, 22);
+        for (let i = 0; i < 4; i++) g.fillStyle(0x6a6070 - i * 0x080808, 1).fillRect(o.x - 22 + i * 3, o.y - 18 + i * 4, 44 - i * 6, 3);
+        this.add.image(o.x - 40, o.y, 'sp_boulder').setOrigin(0.5, 1).setDepth(o.y).setScale(0.8);
+        this.add.image(o.x + 40, o.y, 'sp_rocks').setOrigin(0.5, 1).setDepth(o.y);
+        const glow = this.add.ellipse(o.x, o.y - 12, 60, 24, 0x8a5aff, 0.25).setDepth(o.y - 19).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: glow, alpha: 0.05, duration: 1200, yoyo: true, repeat: -1 });
+        this.add.text(o.x, o.y - 52, o.label ?? 'ダンジョン', { fontFamily: FONT, fontSize: '12px', color: '#e0d0ff', backgroundColor: '#1a0c2add', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6);
       } else if (o.type === 'npc') {
         const sheet = String(o.props?.sheet ?? 'priest');
         this.add.sprite(o.x, o.y, `ch_${sheet}`, sheet.startsWith('npc_') ? undefined : 0).setOrigin(0.5, 1).setDepth(o.y);
@@ -92,7 +103,20 @@ export class WorldScene extends Phaser.Scene {
     if (sp) { this.spawnRect = { x: sp.tx! * 32, y: sp.ty! * 32, w: sp.fw! * 32, h: sp.fh! * 32, monsters: sp.props!.monsters as string[], zone: String(sp.props!.zone) };
       for (let i = 0; i < Number(sp.props!.count ?? 6); i++) this.spawnSymbol(); }
     // disconnect safety: an unfinished battle on the server is resumed as soon as the world loads
-    api<{ battle: BattleView | null }>('GET', `/characters/${c.id}/battle`).then((r) => { if (r.battle && this.scene.isActive()) this.openBattle({ ...r.battle, resumed: true }); }).catch(() => {});
+    // PHASE 8: still inside an instance (reload / reconnect) -> straight back into the dungeon
+    dungeonBus.onMsg = (m) => { if (m?.type === 'entered' && this.scene.isActive() && !this.inBattle) { this.toast(`${m.by} がパーティーで古代地下遺跡に入場しました`, '#3a2a6add'); this.time.delayedCall(600, () => this.goDungeon()); } };
+    this.events.once('shutdown', () => { dungeonBus.onMsg = null; });
+    api<{ dungeon: any }>('GET', `/characters/${c.id}/dungeon`).then((d) => {
+      if (d.dungeon) return this.goDungeon();
+      return api<{ battle: BattleView | null }>('GET', `/characters/${c.id}/battle`).then((r) => { if (r.battle && this.scene.isActive()) this.openBattle({ ...r.battle, resumed: true }); });
+    }).catch(() => {});
+  }
+  goDungeon() { if (!this.scene.isActive()) return; this.inBattle = true; this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(320, () => this.scene.start('Dungeon', { character: this.character })); }
+  async enterDungeon(o: { props?: Record<string, unknown>; label?: string }) {
+    const ok = await confirmBox(`${o.label ?? 'ダンジョン'}に入場しますか？<br><small>パーティーのリーダーが入場すると、このマップにいるオンラインのメンバー全員が一緒に入ります。</small>`, '入場する');
+    if (!ok) return;
+    try { await api('POST', `/characters/${this.character.id}/dungeon/enter`, { dungeonId: o.props?.dungeonId }); this.goDungeon(); }
+    catch (e) { this.toast(errText(e)); }
   }
   /** Field symbol (on-screen monster). Wander is client-side cosmetics; the encounter itself is created by the server. */
   spawnSymbol() {
@@ -191,12 +215,15 @@ export class WorldScene extends Phaser.Scene {
     const node = this.nodes.map((n) => ({ n, d: Math.hypot(n.x - this.pos.x, n.y - 16 - this.pos.y) })).sort((a, b) => a.d - b.d)[0];
     if (node && node.d < 52) return { kind: 'node' as const, node: node.n, x: node.n.x, y: node.n.y - 52 };
     if (npc && npc.d < 72) return { kind: 'npc' as const, npc: npc.o, x: npc.o.x, y: npc.o.y - 78 };
+    const dg = this.map.objects.find((o) => o.type === 'dungeon' && Math.hypot(o.x - this.pos.x, o.y - this.pos.y) < 80);
+    if (dg) return { kind: 'dungeon' as const, dg, x: dg.x, y: dg.y - 70 };
     return null;
   }
   async interact() {
     if (this.inBattle || panelOpen()) return;
     const t = this.nearest(); if (!t) return;
     await this.syncPosition(true); // gather/craft distance is checked against the server position
+    if (t.kind === 'dungeon') return this.enterDungeon(t.dg);
     if (t.kind === 'npc') {
       openDialog(t.npc.id, this.character, (c) => this.onCharacter(c));
       return;
@@ -275,7 +302,7 @@ export class WorldScene extends Phaser.Scene {
     const t = this.nearest();
     // BUG-0xx fix: the targeted node is tinted and drawn above the player so a tall sprite cannot hide it
     for (const n of this.nodes) { if (t?.kind === 'node' && t.node === n) n.img.setTint(0xfff3a0).setDepth(Math.max(n.y, this.pos.y + 0.1)); else n.img.clearTint().setDepth(n.y); }
-    if (t) this.prompt.setText(t.kind === 'node' ? `E: 採集` : `E: 話す`).setPosition(t.x, t.y).setVisible(true); else this.prompt.setVisible(false);
+    if (t) this.prompt.setText(t.kind === 'node' ? `E: 採集` : t.kind === 'dungeon' ? `E: 入場する` : `E: 話す`).setPosition(t.x, t.y).setVisible(true); else this.prompt.setVisible(false);
     this.checkPortal();
   }
 }

@@ -10,6 +10,7 @@ import { listQuests, acceptQuest, turnInQuest } from '../services/quests.js';
 import { shopList, buy, sell, rest } from '../services/npc.js';
 import { rateLimit } from './rateLimit.js';
 import { hub } from '../rooms/hub.js';
+import { claimClear, enterDungeon, getDungeon, isPartyBattle, leaveDungeon, nextFloor, openChest, partyAct, startDungeonBattle } from '../services/dungeon.js';
 import * as S from '../services/social.js';
 type Authed = Request & { auth: { sessionId: string; userId: string; role: string } };
 const wrap = (fn: (req: any, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
@@ -36,10 +37,19 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/battles', auth, battleRl, wrap(async (req: Authed, res) => { const b = await startBattle(req.auth.userId, String(req.body?.characterId ?? ''), String(req.body?.zone ?? ''), typeof req.body?.lead === 'string' ? req.body.lead : undefined); hub.setBattle(String(req.body.characterId), true); res.status(201).json(b); }));
   r.post('/battles/:id/action', auth, battleRl, wrap(async (req: Authed, res) => {
     if (!Number.isInteger(req.body?.turn) || typeof req.body?.command !== 'object') throw new HttpError(400, 'invalid_request');
+    if (await isPartyBattle(String(req.params.id))) return res.json(await partyAct(req.auth.userId, String(req.params.id), req.body.turn, req.body.command));
     const b: any = await act(req.auth.userId, String(req.params.id), req.body.turn, req.body.command);
     if (b.status !== 'active') { const cid = b.combatants.find((x: any) => x.side === 'player')?.characterId; if (cid) hub.setBattle(cid, false); }
     res.json(b);
   }));
+  // PHASE 8: instance dungeon
+  r.get('/characters/:id/dungeon', auth, wrap(async (req: Authed, res) => res.json({ dungeon: await getDungeon(req.auth.userId, String(req.params.id)) })));
+  r.post('/characters/:id/dungeon/enter', auth, battleRl, wrap(async (req: Authed, res) => res.status(201).json(await enterDungeon(req.auth.userId, String(req.params.id), req.body?.dungeonId))));
+  r.post('/characters/:id/dungeon/battle', auth, battleRl, wrap(async (req: Authed, res) => res.status(201).json(await startDungeonBattle(req.auth.userId, String(req.params.id)))));
+  r.post('/characters/:id/dungeon/chest', auth, battleRl, wrap(async (req: Authed, res) => res.json(await openChest(req.auth.userId, String(req.params.id)))));
+  r.post('/characters/:id/dungeon/next', auth, battleRl, wrap(async (req: Authed, res) => res.json(await nextFloor(req.auth.userId, String(req.params.id)))));
+  r.post('/characters/:id/dungeon/claim', auth, battleRl, wrap(async (req: Authed, res) => res.json(await claimClear(req.auth.userId, String(req.params.id)))));
+  r.post('/characters/:id/dungeon/leave', auth, battleRl, wrap(async (req: Authed, res) => res.json(await leaveDungeon(req.auth.userId, String(req.params.id)))));
   // PHASE 4: items / equipment / gathering / crafting / enhancement / position — all server-authoritative.
   const actRl = rateLimit('action', opts.actionLimit ?? 180, 60_000), moveRl = rateLimit('move', opts.moveLimit ?? 400, 60_000);
   const U = (req: Authed) => req.auth.userId, P = (req: Authed) => String(req.params.id), B = (req: Authed) => req.body ?? {};

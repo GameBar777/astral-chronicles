@@ -11,6 +11,6 @@ export interface MapData {
   spawn: Vec2;
   projection?: 'orthogonal' | 'oblique_3_4';
   /** x,y = footprint bottom-center (pixel). Depth (Y-sort) uses y. tx/ty/fw/fh = footprint in tiles (collision). */
-  objects: { id: string; type: 'npc' | 'portal' | 'gather' | 'chest' | 'deco' | 'spawn'; kind?: string; x: number; y: number;
+  objects: { id: string; type: 'npc' | 'portal' | 'gather' | 'chest' | 'deco' | 'spawn' | 'dungeon'; kind?: string; x: number; y: number;
     tx?: number; ty?: number; fw?: number; fh?: number; label?: string; props?: Record<string, unknown> }[];
 }

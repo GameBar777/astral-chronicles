@@ -5,6 +5,8 @@ export const SPRITE_KINDS = ['house', 'house_wide', 'house_sign', 'tree', 'pine'
   'oak', 'boulder', 'rocks', 'grass_tuft', 'wildflowers', 'stump', 'signpost', 'berry_bush']; // + PHASE 3 meadow props
 export const MONSTERS = ['slime', 'horn_rabbit', 'mushroom', 'goblin', 'wild_dog'];
 export const CHAR_SHEETS = ['warrior', 'knight', 'mage', 'priest'];
+export const NODE_KINDS = ['node_copper', 'node_iron', 'node_logging', 'node_herb'];
+export const NPC_SHEETS = ['npc_shop', 'npc_inn', 'npc_chief', 'npc_smith'];
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   preload() {
@@ -12,6 +14,8 @@ export class BootScene extends Phaser.Scene {
     for (const c of CHAR_SHEETS) this.load.spritesheet(`ch_${c}`, `/sprites/char_${c}.png`, { frameWidth: 48, frameHeight: 60 });
     this.load.image('groundtex', '/sprites/ground.png');
     for (const m of MONSTERS) this.load.image(`mon_${m}`, `/sprites/mon_${m}.png`);
+    for (const k of NODE_KINDS) this.load.image(`sp_${k}`, `/sprites/${k}.png`);
+    for (const k of NPC_SHEETS) this.load.image(`ch_${k}`, `/sprites/${k}.png`);
     this.load.image('battle_meadow', '/sprites/battle_meadow.png');
   }
   create() { generateWorldArt(this); this.game.events.emit('ready'); }

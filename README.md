@@ -46,3 +46,9 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 
 ### PHASE 3
 `npm run migrate -w @astral/server`（003適用）→ サーバー/クライアント起動 → アステリア東口から草原へ。E2E: `cd client && node e2e/phase3.mjs`
+
+### PHASE 4
+- `GET /api/characters/:id/items` / `POST equip|unequip|use` / `PUT position` / `POST portal`
+- `GET|POST gathering|gather` / `GET /api/recipes` / `GET|POST crafting|craft` / `POST craft/:jobId/claim` / `POST enhance`
+- 変更系は `requestId`（8〜64文字英数-）必須で冪等。E2E: `cd client && node e2e/phase4.mjs`
+- 操作: I=持ち物/装備、E=話す/採集（鍛冶屋で製作・強化）

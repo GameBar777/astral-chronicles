@@ -1,5 +1,7 @@
 // E2E: auth -> character creation -> 3/4 world (movement, footprint collision, Y-sort occlusion, camera, JP font)
 import { chromium } from 'playwright';
+import { newDb, charIdByName, makeTp } from './lib.mjs';
+const db = newDb();
 const URL = process.env.E2E_URL ?? 'http://127.0.0.1:5173/';
 const SHOT = new globalThis.URL('../../docs/screenshots/', import.meta.url).pathname;
 const results = []; const ok = (name, cond, info = '') => { results.push({ name, pass: !!cond }); console.log(`${cond ? 'PASS' : 'FAIL'} ${name} ${info}`); };
@@ -19,7 +21,7 @@ await p.click('#new'); await p.waitForSelector('#name');
 await p.fill('#name', '管理者テスト'); await p.click('#create');
 await p.waitForFunction(() => document.querySelector('#err')?.textContent);
 ok('banned name rejected', /使用できない語句/.test(await p.textContent('#err')));
-const name = 'テスト' + String.fromCharCode(0x30a2 + (Date.now() % 40));
+const name = 'テスト' + String.fromCharCode(0x30a2 + (Date.now() % 40), 0x30a2 + (Math.floor(Date.now() / 40) % 40), 0x30a2 + (Math.floor(Date.now() / 1600) % 40));
 await p.fill('#name', name); await p.check('input[value=mage]'); await p.selectOption('#hc', '3');
 await p.screenshot({ path: SHOT + 'phase2-create.png' });
 await p.click('#create');
@@ -37,7 +39,7 @@ await hold('ArrowRight', 500); const s2 = await W(); ok('moves right', s2.x > s.
 ok('camera follows', Math.abs(s2.camX - s2.x) < 40 && Math.abs(s2.camY - s2.y) < 40, `${s2.camX},${s2.camY}`);
 ok('camera bounds = map size', s2.bounds.w === 44 * 32 && s2.bounds.h === 34 * 32);
 // Y-sort: put player just north of guild house footprint (tiles x9-13, y6-8, bottom y=288)
-const tp = (x, y) => p.evaluate(([x, y]) => { window.__astral.scene.getScene('World').pos = { x, y }; }, [x, y]);
+let cid; const tp = makeTp(p, db, async () => (cid ??= await charIdByName(db, name)));
 await tp(368, 186); await p.waitForTimeout(200);
 const house = await p.evaluate(() => window.__astral.scene.getScene('World').props.find((o) => o.x === 368 && o.getData('kind') === 'house').depth);
 s = await W(); ok('behind house: player depth < house depth (occluded)', s.depth < house, `${s.depth} < ${house}`);
@@ -56,5 +58,5 @@ await p.click('#logout'); await p.waitForSelector('#email');
 ok('logout returns to login', /ログアウト/.test(await p.textContent('#err')));
 ok('token cleared', await p.evaluate(() => !sessionStorage.getItem('astral.token')));
 ok('no page errors', errors.length === 0, errors.join(' | '));
-await b.close();
+await b.close(); await db.end();
 const f = results.filter((r) => !r.pass).length; console.log(`\n${results.length - f}/${results.length} passed`); process.exit(f ? 1 : 0);

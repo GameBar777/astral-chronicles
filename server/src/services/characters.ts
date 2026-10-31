@@ -29,6 +29,12 @@ export async function createCharacter(userId: string, body: any) {
       VALUES($1,$2,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [id, st.maxHp, st.maxMp, st.str, st.vit, st.int, st.agi, st.luk, st.atk, st.def, st.matk, st.mdef]);
     for (const sk of CLASSES[cls].startingSkills) await c.query('INSERT INTO character_skills(character_id,skill_id) VALUES($1,$2)', [id, sk]);
     await c.query("INSERT INTO inventory(character_id,item_id,quantity) VALUES($1,'potion_small',3)", [id]); // PHASE 3 starter items
+    // PHASE 4 starter gear (equipped)
+    const starter: [string, string][] = [[cls === 'mage' || cls === 'priest' ? 'oak_staff' : 'wooden_sword', 'weapon'], ...(cls === 'knight' ? [['wooden_shield', 'shield'] as [string, string]] : [])];
+    for (const [item, slot] of starter) {
+      const inv = (await c.query('INSERT INTO inventory(character_id,item_id,quantity) VALUES($1,$2,1) RETURNING id', [id, item])).rows[0].id;
+      await c.query('INSERT INTO character_equipment(character_id,slot,inventory_id) VALUES($1,$2,$3)', [id, slot, inv]);
+    }
     await c.query('COMMIT');
     return (await listCharacters(userId)).find((x) => x.id === id)!;
   } catch (e: any) {

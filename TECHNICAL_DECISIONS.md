@@ -25,3 +25,9 @@
 - 報酬は rewards_committed フラグ＋transactions 'battle:<id>' の ON CONFLICT で二重付与防止
 - 切断: 30分以内は再開、超過は放棄（abort）。アクティブ戦闘はキャラ毎1件（部分ユニーク索引）
 - 敗北: HP最大値の30%で復帰、アステリアへ。逃走式・防御(かばう)は shared/battle.ts 準拠
+
+## TD-012 アイテム・位置（PHASE 4）
+- 素ステータス(characters)と装備補正を分離し、戦闘開始時に合算。強化値は inventory 行に保持。
+- 戦闘ドロップは枠上限を無視（取りこぼし防止）、採集/製作/使用は上限厳守で `inventory_full`。
+- 冪等性: クライアント生成 requestId を `transactions(req:<id>)` に結果ごと保存し、同キャラ行ロック下で再送時は同結果を返す（別種別の再利用は409）。
+- 位置: PUT position を400ms間隔、速度上限 `PLAYER_SPEED·dt·1.35+40`（dt≤5s）と通行判定で拒否→サーバー座標へ補正。マップ遷移はポータル矩形内にいる場合のみ。

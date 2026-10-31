@@ -2,6 +2,8 @@ import type pg from 'pg';
 import { applyExp, statsAt, resolveTurn, computeRewards, BattleError, BATTLE_ITEMS, SKILLS, type BattleState, type Combatant, type Command, type Rng } from '@astral/shared';
 import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
+import { addItem as addInv, equipmentBonus } from './inventory.js';
+import { MAPS, TOWN } from '../world/maps.js';
 export const ZONES = ['green_meadow'];
 export const MAX_ENEMIES = 5;
 const STALE_MS = 30 * 60_000; // an untouched active battle older than this is aborted (no rewards) when a new one is requested
@@ -11,7 +13,7 @@ export const __setRng = (r: Rng) => { rng = r; }; // tests only
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ownChar = async (c: pg.PoolClient, userId: string, characterId: string, lock = false) => {
   if (!UUID.test(characterId)) throw new HttpError(404, 'character_not_found');
-  const r = await c.query(`SELECT c.id,c.name,c.class,c.level,c.exp,c.gold,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
+  const r = await c.query(`SELECT c.id,c.name,c.class,c.level,c.exp,c.gold,c.map_id,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
     WHERE c.id=$1 AND c.user_id=$2 AND c.deleted_at IS NULL ${lock ? 'FOR UPDATE OF c' : ''}`, [characterId, userId]);
   if (!r.rows[0]) throw new HttpError(404, 'character_not_found');
   return r.rows[0];
@@ -61,9 +63,11 @@ export const startBattle = (userId: string, characterId: string, zone: string, l
   if (cur && Date.now() - new Date(cur.updated_at).getTime() < STALE_MS) return view(cur, { resumed: true });
   if (cur) await c.query(`UPDATE battle_logs SET result='aborted', ended_at=now() WHERE id=$1`, [cur.id]);
   if (ch.hp <= 0) throw new HttpError(409, 'character_down');
+  if (ch.map_id !== zone) throw new HttpError(409, 'wrong_map'); // server-side position: can only fight in the zone you stand in
+  const eb = await equipmentBonus(c, characterId);
   const skills = (await c.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [characterId])).rows.map((r) => r.skill_id).filter((s) => SKILLS[s]);
   const player: Combatant = { id: 'p0', side: 'player', characterId, name: ch.name, level: ch.level, hp: ch.hp, maxHp: ch.max_hp, mp: ch.mp, maxMp: ch.max_mp,
-    atk: ch.atk, def: ch.def, matk: ch.matk, mdef: ch.mdef, agi: ch.agi, luk: ch.luk, element: 'none', statuses: [], defending: false, guardTurns: 0, skills };
+    atk: ch.atk + eb.atk, def: ch.def + eb.def, matk: ch.matk + eb.matk, mdef: ch.mdef + eb.mdef, agi: ch.agi, luk: ch.luk, element: 'none', statuses: [], defending: false, guardTurns: 0, skills };
   const enemies = await pickMonsters(c, zone, lead);
   const state: BattleState = { turn: 1, status: 'active', canFlee: true, combatants: [player, ...enemies], log: [{ turn: 0, kind: 'start', text: `${enemies.map((e) => e.name).join('、')}があらわれた！` }] };
   const row = (await c.query(`INSERT INTO battle_logs(character_id,zone,participants,monsters,state,log) VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -91,6 +95,7 @@ export const act = (userId: string, battleId: string, turn: number, command: Com
     const result = st.status;
     const hp = result === 'defeat' ? Math.max(1, Math.floor(p.maxHp * 0.3)) : p.hp; // defeat: revive at 30% (TD-011)
     await c.query('UPDATE character_stats SET hp=$2, mp=$3 WHERE character_id=$1', [row.character_id, Math.min(hp, p.maxHp), p.mp]);
+    if (result === 'defeat') { const sp = MAPS[TOWN].spawn; await c.query('UPDATE characters SET map_id=$2,pos_x=$3,pos_y=$4,pos_updated_at=now() WHERE id=$1', [row.character_id, TOWN, Math.round(sp.x), Math.round(sp.y)]); }
     if (result === 'victory') ({ rewards, levelUp } = await commitRewards(c, row.id, ch, st));
     await c.query(`UPDATE battle_logs SET state=$2, log=$3, result=$4, rewards=$5, ended_at=now(), updated_at=now() WHERE id=$1`,
       [row.id, JSON.stringify(st), JSON.stringify(st.log), result, JSON.stringify(rewards ?? {})]);
@@ -104,11 +109,8 @@ async function consumeItem(c: pg.PoolClient, characterId: string, itemId: string
   if (!it) throw new BattleError('no_item');
   if (it.quantity > 1) await c.query('UPDATE inventory SET quantity=quantity-1 WHERE id=$1', [it.id]); else await c.query('DELETE FROM inventory WHERE id=$1', [it.id]);
 }
-export async function addItem(c: pg.PoolClient, characterId: string, itemId: string, qty: number) {
-  const cur = (await c.query('SELECT id FROM inventory WHERE character_id=$1 AND item_id=$2 ORDER BY created_at LIMIT 1 FOR UPDATE', [characterId, itemId])).rows[0];
-  if (cur) await c.query('UPDATE inventory SET quantity=quantity+$2 WHERE id=$1', [cur.id, qty]);
-  else await c.query('INSERT INTO inventory(character_id,item_id,quantity) VALUES($1,$2,$3)', [characterId, itemId, qty]);
-}
+/** battle drops are never lost: slot limit not enforced here (TD-012) */
+export const addItem = (c: pg.PoolClient, characterId: string, itemId: string, qty: number) => addInv(c, characterId, itemId, qty, false);
 /**
  * Double-reward guard (two layers): battle_logs.rewards_committed flipped with a conditional UPDATE, and
  * transactions UNIQUE(character_id, 'battle:<id>'). Either one alone prevents a second grant.

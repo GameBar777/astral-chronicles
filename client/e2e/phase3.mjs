@@ -2,6 +2,7 @@
 // victory rewards + LEVEL UP effect, duplicate-turn rejection, HUD refresh, return to field.
 import { chromium } from 'playwright';
 import pg from 'pg';
+import { makeTp } from './lib.mjs';
 const URL = process.env.E2E_URL ?? 'http://127.0.0.1:5173/';
 const SHOT = new globalThis.URL('../../docs/screenshots/', import.meta.url).pathname;
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL ?? 'postgres://astral:astral_dev_pw@127.0.0.1:5433/astral' });
@@ -12,20 +13,22 @@ const errors = []; p.on('pageerror', (e) => errors.push(String(e))); p.on('conso
 await p.goto(URL); await p.waitForSelector('#email');
 await p.fill('#email', `e3_${Date.now()}@example.com`); await p.fill('#pw', 'correct-horse-9'); await p.click('#reg');
 await p.waitForSelector('#new'); await p.click('#new'); await p.waitForSelector('#name');
-const name = 'バトル' + String.fromCharCode(0x30a2 + (Date.now() % 40));
+const name = 'バトル' + String.fromCharCode(0x30a2 + (Date.now() % 40), 0x30a2 + (Math.floor(Date.now() / 40) % 40), 0x30a2 + (Math.floor(Date.now() / 1600) % 40));
 await p.fill('#name', name); await p.check('input[value=warrior]'); await p.click('#create');
 await p.waitForFunction(() => window.__astral?.scene.isActive('World'), null, { timeout: 15000 }); await p.waitForTimeout(600);
 const world = () => p.evaluate(() => { const s = window.__astral.scene.getScene('World'); return { map: s.map.id, x: s.pos.x, y: s.pos.y, symbols: s.symbols.length, inBattle: s.inBattle, lv: s.character.level, gold: s.character.gold }; });
 const charId = (await db.query('SELECT id FROM characters WHERE name=$1', [name])).rows[0].id;
 // east exit -> meadow
-await p.evaluate(() => { window.__astral.scene.getScene('World').pos = { x: 42.2 * 32, y: 17.6 * 32 }; });
+const tp = makeTp(p, db, async () => charId);
+await tp(42.2 * 32, 17.6 * 32);
 await p.keyboard.down('ArrowRight'); await p.waitForTimeout(700); await p.keyboard.up('ArrowRight');
 await p.waitForFunction(() => window.__astral.scene.getScene('World').map?.id === 'green_meadow' && !window.__astral.scene.getScene('World').inBattle, null, { timeout: 5000 });
 await p.waitForTimeout(900); let w = await world();
 ok('east portal -> green_meadow', w.map === 'green_meadow', JSON.stringify(w));
 ok('monster symbols roam in meadow', w.symbols >= 5, `symbols=${w.symbols}`);
 // walk a bit for a natural field shot, symbols moved close to the camera for framing
-await p.evaluate(() => { const s = window.__astral.scene.getScene('World'); s.cooldownUntil = 1e12; s.pos = { x: 14 * 32, y: 17.5 * 32 };
+await tp(14 * 32, 17.5 * 32);
+await p.evaluate(() => { const s = window.__astral.scene.getScene('World'); s.cooldownUntil = 1e12;
   s.symbols.slice(0, 4).forEach((m, i) => { m.pos = [{ x: 18 * 32, y: 14 * 32 }, { x: 10 * 32, y: 20 * 32 }, { x: 19 * 32, y: 21 * 32 }, { x: 9 * 32, y: 13.5 * 32 }][i]; }); });
 await p.waitForTimeout(700); await p.screenshot({ path: SHOT + 'phase3-meadow.png' });
 // near level-up: Lv1 needs 100 EXP; slime gives 8 => set 95
@@ -59,7 +62,7 @@ if (B2.status === 'active') {
 // disconnect: reload page mid-battle -> resume same battle from server state
 B = await bs();
 await p.reload(); await p.waitForSelector('.play', { timeout: 15000 }); await p.click('.play');
-await p.waitForFunction(() => window.__astral?.scene.isActive('Battle'), null, { timeout: 10000 }); await p.waitForSelector('#b-cmd button'); await p.waitForTimeout(500);
+await p.waitForFunction(() => window.__astral?.scene.isActive('Battle'), null, { timeout: 10000 }).catch(async (e) => { console.log('DBG', errors, await p.evaluate(() => [window.__astral?.scene.getScenes(true).map((s) => s.scene.key)])); await p.screenshot({ path: '/tmp/dbg.png' }); throw e; }); await p.waitForSelector('#b-cmd button'); await p.waitForTimeout(500);
 let R = await bs();
 ok('reload mid-battle resumes same battle/turn/HP', R.id === B.id && R.turn === B.turn && JSON.stringify(R.enemies) === JSON.stringify(B.enemies), `turn ${R.turn}`);
 ok('resume notice in log', /再開/.test(await p.textContent('#b-log')));
@@ -92,7 +95,7 @@ ok('returned to meadow field', w.map === 'green_meadow' && w.lv === 2, JSON.stri
 ok('HUD shows Lv.2', await p.evaluate(() => window.__astral.scene.getScene('Hud').children.list.some((o) => o.text?.includes('Lv.2'))));
 await p.screenshot({ path: SHOT + 'phase3-after.png' });
 // west portal back to town
-await p.evaluate(() => { const s = window.__astral.scene.getScene('World'); s.cooldownUntil = 1e12; s.pos = { x: 1.6 * 32, y: 17.6 * 32 }; });
+await p.evaluate(() => { window.__astral.scene.getScene('World').cooldownUntil = 1e12; }); await tp(1.6 * 32, 17.6 * 32);
 await p.keyboard.down('ArrowLeft'); await p.waitForTimeout(600); await p.keyboard.up('ArrowLeft');
 await p.waitForFunction(() => window.__astral.scene.getScene('World').map?.id === 'asteria', null, { timeout: 5000 }).catch(() => {});
 ok('west portal -> asteria', (await world()).map === 'asteria');

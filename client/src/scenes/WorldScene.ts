@@ -2,13 +2,15 @@ import Phaser from 'phaser';
 import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2 } from '@astral/shared';
 import asteria from '../../../assets/maps/asteria.json';
 import meadow from '../../../assets/maps/green_meadow.json';
-import { api, errText, type CharacterDto } from '../api';
+import { api, errText, session, type CharacterDto } from '../api';
 import type { BattleView } from './BattleScene';
+import { openInventory, openSmith, closePanel, panelOpen, newRequestId } from '../panels';
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
 interface Symbol { s: Phaser.GameObjects.Image; sh: Phaser.GameObjects.Ellipse; id: string; pos: Vec2; v: Vec2; t: number }
-/** char sheet frames: 0 front, 1 left-facing, 2 right-facing, 3 back */
+/** char sheet frames: 0 front, 1 left-facing, 2 right-facing, 3 back (idle); 4+2*dir..5+2*dir = walk A/B (scripts/gen-walk-frames.py) */
 const SHEET_FRAME: Record<Direction, number> = { s: 0, n: 3, w: 1, nw: 1, sw: 1, e: 2, ne: 2, se: 2 };
+const POS_SYNC_MS = 400;
 const TYPE_ORDER = [1, 3, 2, 4]; // grass base, then dirt, cobble, water painted on top with soft organic edges
 const hash = (x: number, y: number) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
@@ -21,12 +23,14 @@ export class WorldScene extends Phaser.Scene {
   map!: MapData; pos!: Vec2; player!: Phaser.GameObjects.Sprite; nameTag!: Phaser.GameObjects.Text;
   keys!: Record<'up'|'down'|'left'|'right'|'w'|'a'|'s'|'d', Phaser.Input.Keyboard.Key>;
   facing: Direction = 's'; walkT = 0; props: Phaser.GameObjects.Image[] = []; character!: CharacterDto;
+  lastSent = { x: 0, y: 0 }; syncT = 0; syncing = false; portalBusy = false; prompt!: Phaser.GameObjects.Text; nodes: { id: string; x: number; y: number; img: Phaser.GameObjects.Image; type: string }[] = [];
+  keyE!: Phaser.Input.Keyboard.Key; keyI!: Phaser.Input.Keyboard.Key;
   battleZone?: string; symbols: Symbol[] = []; inBattle = false; cooldownUntil = 0; spawnRect?: { x: number; y: number; w: number; h: number; monsters: string[]; zone: string };
   constructor() { super('World'); }
-  create(data: { character: CharacterDto; mapId?: string; spawn?: Vec2 }) {
+  create(data: { character: CharacterDto }) {
     this.character = data.character;
-    // NOTE: current map/position is client-side until PHASE 4 (server-authoritative movement); server keeps map_id=asteria
-    this.map = MAPS[data.mapId ?? this.character.map_id] ?? MAPS.asteria;
+    // PHASE 4: map + position come from the server (characters.map_id/pos_x/pos_y); client only predicts movement
+    this.map = MAPS[this.character.map_id] ?? MAPS.asteria; this.nodes = []; this.portalBusy = false;
     this.symbols = []; this.inBattle = false; this.cooldownUntil = this.time.now + 1500; this.spawnRect = undefined;
     this.buildGround();
     this.props = [];
@@ -38,21 +42,28 @@ export class WorldScene extends Phaser.Scene {
         const img = this.add.image(x, o.y + (o.kind.startsWith('fence') ? 6 : 0), tex).setOrigin(0.5, 1).setDepth(o.y);
         img.setData('kind', o.kind); this.props.push(img);
         if (o.label) this.add.text(o.x, o.y - img.height - 2, o.label, { fontFamily: FONT, fontSize: '12px', color: '#ffe9b0', backgroundColor: '#2a1a0cdd', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0).setDepth(o.y + 0.5);
+      } else if (o.type === 'gather' && o.kind) {
+        const img = this.add.image(o.x, o.y, `sp_${o.kind}`).setOrigin(0.5, 1).setDepth(o.y);
+        this.nodes.push({ id: o.id, x: o.x, y: o.y, img, type: String(o.props?.gatherType) });
       } else if (o.type === 'npc') {
         this.add.sprite(o.x, o.y, `ch_${String(o.props?.sheet ?? 'priest')}`, 0).setOrigin(0.5, 1).setDepth(o.y);
         this.add.text(o.x, o.y - 62, String(o.props?.name ?? o.id), { fontFamily: FONT, fontSize: '12px', color: '#ffe08a', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(1e6);
       }
     }
     const c = this.character;
-    const spawnOk = !data.mapId && c.map_id === this.map.id && (c.pos_x || c.pos_y);
-    this.pos = data.spawn ? { ...data.spawn } : spawnOk ? { x: c.pos_x, y: c.pos_y } : { ...this.map.spawn };
+    this.pos = c.map_id === this.map.id ? { x: c.pos_x, y: c.pos_y } : { ...this.map.spawn };
+    this.lastSent = { ...this.pos }; this.syncT = 0;
     // NOTE: appearance (hair/skin/body) is not yet reflected by the generated class sheets (KNOWN LIMITATION, see BUG-007)
     this.player = this.add.sprite(this.pos.x, this.pos.y, `ch_${c.class}`, 0).setOrigin(0.5, 1);
     this.nameTag = this.add.text(0, 0, c.name, { fontFamily: FONT, fontSize: '12px', color: '#fff', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(1e6);
     this.cameras.main.setBounds(0, 0, this.map.width * 32, this.map.height * 32).startFollow(this.player, true, 0.15, 0.15).setRoundPixels(true).setZoom(1.5); // close 3/4 framing like the art target
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
-    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印キーで移動`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
+    this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
+    this.keyE.on('down', () => this.interact()); this.keyI.on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openInventory(this.character, (c) => this.onCharacter(c)); });
+    this.events.once('shutdown', () => { closePanel(); this.keyE.removeAllListeners(); this.keyI.removeAllListeners(); });
+    this.prompt = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#fff4cc', backgroundColor: '#3a2a14ee', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6 + 1).setVisible(false);
+    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  I:持ち物`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
     const place = () => info.setPosition(Math.round(this.scale.width / 2 - info.width / 2), this.scale.height - info.height - 8);
     place(); this.scale.on('resize', place);
     this.events.once('shutdown', () => this.scale.off('resize', place));
@@ -106,22 +117,74 @@ export class WorldScene extends Phaser.Scene {
     const fresh = (await api<CharacterDto[]>('GET', '/characters').catch(() => [])).find((x) => x.id === this.character.id);
     if (fresh) { this.character = fresh; this.game.events.emit('character', fresh); }
     this.scene.setVisible(true, 'Hud');
-    if (status === 'defeat') return this.scene.restart({ character: this.character, mapId: 'asteria' }); // revived in town (TD-011)
-    // resumed after reload in another map: go back to the battle's field (map position is client-side until PHASE 4)
-    if (this.battleZone && this.battleZone !== this.map.id && MAPS[this.battleZone]) return this.scene.restart({ character: this.character, mapId: this.battleZone });
+    // defeat: the server already moved the character to town (TD-011); any map mismatch -> follow the server
+    if (this.character.map_id !== this.map.id) return this.scene.restart({ character: this.character });
     this.inBattle = false; this.cooldownUntil = this.time.now + 2500;
     if (this.spawnRect && this.symbols.length < 7) this.time.delayedCall(4000, () => this.scene.isActive() && this.spawnSymbol());
   }
-  toast(msg: string) {
-    const t = this.add.text(this.scale.width / 2, 80, msg, { fontFamily: FONT, fontSize: '14px', color: '#fff', backgroundColor: '#a02020dd', padding: { x: 8, y: 4 } }).setOrigin(0.5).setScrollFactor(0).setDepth(1e7);
+  toast(msg: string, bg = '#a02020dd') {
+    const t = this.add.text(this.scale.width / 2, 80, msg, { fontFamily: FONT, fontSize: '14px', color: '#fff', backgroundColor: bg, padding: { x: 8, y: 4 } }).setOrigin(0.5).setScrollFactor(0).setDepth(1e7);
     this.time.delayedCall(2500, () => t.destroy());
   }
   checkPortal() {
     const tx = Math.floor(this.pos.x / 32), ty = Math.floor((this.pos.y - 1) / 32);
     const p = this.map.objects.find((o) => o.type === 'portal' && o.fw && tx >= o.tx! && tx < o.tx! + o.fw && ty >= o.ty! && ty < o.ty! + o.fh!);
-    if (!p || !MAPS[String(p.props?.to)]) return;
-    this.inBattle = true; this.cameras.main.fadeOut(250);
-    this.time.delayedCall(260, () => this.scene.restart({ character: this.character, mapId: String(p.props!.to), spawn: p.props!.spawn as Vec2 }));
+    if (!p || !MAPS[String(p.props?.to)] || this.portalBusy) return;
+    // server decides the map change: flush our position, then ask to use the portal
+    this.portalBusy = true; this.inBattle = true;
+    (async () => {
+      try {
+        await this.syncPosition(true);
+        const r = await api<{ pos: { mapId: string; x: number; y: number } }>('POST', `/characters/${this.character.id}/portal`, { portalId: p.id });
+        this.character = { ...this.character, map_id: r.pos.mapId, pos_x: r.pos.x, pos_y: r.pos.y };
+        this.cameras.main.fadeOut(250);
+        this.time.delayedCall(260, () => this.scene.restart({ character: this.character }));
+      } catch (e) {
+        this.toast(errText(e)); this.inBattle = false;
+        this.pos = { x: this.pos.x - 24, y: this.pos.y }; // step back off the portal
+        this.time.delayedCall(800, () => { this.portalBusy = false; });
+      }
+    })();
+  }
+  /** Send the predicted position; the server validates (map/collision/speed) and may snap us back. */
+  async syncPosition(force = false) {
+    if (this.syncing && !force) return;
+    if (!force && Math.hypot(this.pos.x - this.lastSent.x, this.pos.y - this.lastSent.y) < 2) return;
+    this.syncing = true; const sent = { x: Math.round(this.pos.x), y: Math.round(this.pos.y) };
+    try {
+      const r = await fetch('/api' + `/characters/${this.character.id}/position`, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ mapId: this.map.id, ...sent }) });
+      const j = await r.json().catch(() => null);
+      if (j?.ok) { this.lastSent = sent; this.character.pos_x = sent.x; this.character.pos_y = sent.y; }
+      else if (j?.pos) {
+        if (j.pos.mapId !== this.map.id) { this.character = { ...this.character, map_id: j.pos.mapId, pos_x: j.pos.x, pos_y: j.pos.y }; this.scene.restart({ character: this.character }); return; }
+        this.pos = { x: j.pos.x, y: j.pos.y }; this.lastSent = { ...this.pos }; // server correction
+      }
+    } catch { /* offline: retry on next tick */ } finally { this.syncing = false; }
+  }
+  onCharacter(c: CharacterDto) { this.character = { ...this.character, ...c }; this.game.events.emit('character', this.character); }
+  nearest() {
+    const npc = this.map.objects.filter((o) => o.type === 'npc').map((o) => ({ o, d: Math.hypot(o.x - this.pos.x, o.y - this.pos.y) })).sort((a, b) => a.d - b.d)[0];
+    const node = this.nodes.map((n) => ({ n, d: Math.hypot(n.x - this.pos.x, n.y - 16 - this.pos.y) })).sort((a, b) => a.d - b.d)[0];
+    if (node && node.d < 52) return { kind: 'node' as const, node: node.n, x: node.n.x, y: node.n.y - 52 };
+    if (npc && npc.d < 72) return { kind: 'npc' as const, npc: npc.o, x: npc.o.x, y: npc.o.y - 78 };
+    return null;
+  }
+  async interact() {
+    if (this.inBattle || panelOpen()) return;
+    const t = this.nearest(); if (!t) return;
+    await this.syncPosition(true); // gather/craft distance is checked against the server position
+    if (t.kind === 'npc') {
+      if (t.npc.id === 'npc_smith_gord') openSmith(this.character, (c) => this.onCharacter(c));
+      else this.toast(`${String(t.npc.props?.name ?? '')}「ようこそ、旅の方。」`, '#2a3a6add');
+      return;
+    }
+    try {
+      const r = await api('POST', `/characters/${this.character.id}/gather`, { nodeId: t.node.id, requestId: newRequestId() });
+      this.tweens.add({ targets: t.node.img, y: t.node.y - 4, yoyo: true, duration: 90, repeat: 2 });
+      this.toast(`${r.item.name} ×${r.item.qty} を手に入れた！${r.levelUp ? `（採集Lv${r.level}にアップ）` : ''}`, '#2a6a3add');
+      t.node.img.setAlpha(0.45); this.time.delayedCall(r.respawnSec * 1000, () => t.node.img.active && t.node.img.setAlpha(1));
+    } catch (e) { this.toast(errText(e)); }
   }
   /** Composite the ground into one canvas: seamless 256px textures per type, masks upscaled bilinearly from the
    * tile grid and thresholded with 2px-block noise -> rounded, ragged borders instead of hard 32px squares. */
@@ -170,15 +233,21 @@ export class WorldScene extends Phaser.Scene {
   update(_t: number, dtMs: number) {
     if (this.spawnRect) this.updateSymbols(dtMs);
     if (this.inBattle) return;
+    if (panelOpen()) { this.player.setFrame(SHEET_FRAME[this.facing]); this.prompt.setVisible(false); return; }
     const k = this.keys;
     const v = inputToVector({ up: k.up.isDown || k.w.isDown, down: k.down.isDown || k.s.isDown, left: k.left.isDown || k.a.isDown, right: k.right.isDown || k.d.isDown });
     const dt = Math.min(dtMs, 100) / 1000;
     this.pos = moveWithCollision(this.map, this.pos, { x: v.x * PLAYER_SPEED * dt, y: v.y * PLAYER_SPEED * dt });
     const dir = vectorToDirection(v); if (dir) this.facing = dir;
     this.walkT = dir ? this.walkT + dtMs : 0;
-    const bob = dir ? [0, -2, 0, -1][Math.floor(this.walkT / 120) % 4] : 0; // 4-direction sheet has no walk frames yet: bob step
-    this.player.setPosition(Math.round(this.pos.x), Math.round(this.pos.y) + bob).setFrame(SHEET_FRAME[this.facing]).setDepth(this.pos.y); // Y-sort by feet
+    const base = SHEET_FRAME[this.facing], step = Math.floor(this.walkT / 150) % 4; // A, idle, B, idle
+    const frame = dir ? (step % 2 ? base : 4 + base * 2 + (step >> 1)) : base;
+    this.player.setPosition(Math.round(this.pos.x), Math.round(this.pos.y)).setFrame(frame).setDepth(this.pos.y); // Y-sort by feet
     this.nameTag.setPosition(Math.round(this.pos.x), Math.round(this.pos.y) - 62).setDepth(this.pos.y + 0.2); // BUG-006: tag Y-sorted with its owner
+    this.syncT += dtMs;
+    if (this.syncT >= POS_SYNC_MS || (!dir && this.syncT > 120)) { this.syncT = 0; this.syncPosition(); }
+    const t = this.nearest();
+    if (t) this.prompt.setText(t.kind === 'node' ? `E: 採集` : `E: 話す`).setPosition(t.x, t.y).setVisible(true); else this.prompt.setVisible(false);
     this.checkPortal();
   }
 }

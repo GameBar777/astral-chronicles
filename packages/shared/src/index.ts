@@ -5,3 +5,4 @@ export * from './classes.js';
 export * from './leveling.js';
 export * from './validation.js';
 export * from './battle.js';
+export * from './items.js';

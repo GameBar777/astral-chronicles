@@ -55,3 +55,25 @@ button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
 .lu-row { display: grid; grid-template-columns: 70px 1fr 50px; font-size: 14px; padding: 1px 6px; } .lu-row b { font-weight: normal; color: #c8d0f0; text-align: left; } .lu-row em { color: #7aff9a; font-style: normal; text-align: right; }
 @keyframes lu { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 #chat.hidden { display: none; }
+/* ---- PHASE 4 panels (inventory / smith) ---- */
+.p4 { position: fixed; right: 16px; top: 64px; width: min(560px, 94vw); max-height: calc(100vh - 90px); display: flex; flex-direction: column; z-index: 25; background: linear-gradient(#1e2744f4, #0d1224f4); border: 2px solid #d9b45e; outline: 2px solid #3a2a14; box-shadow: inset 0 0 0 3px #0d1224, inset 0 0 0 4px #8a6a2e, 0 6px 18px #000a; border-radius: 8px; color: #f4ecd8; font-family: "DotGothic16", sans-serif; }
+.p4-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px 6px; color: #ffe08a; font-size: 17px; border-bottom: 1px solid #8a6a2e; }
+.p4-head .x { margin: 0; padding: 2px 8px; font-size: 13px; background: #2a2f44; }
+.p4-body { overflow: auto; padding: 8px 12px; } .p4-msg { min-height: 22px; padding: 4px 14px 10px; font-size: 14px; } .p4-msg.ok { color: #9af0a0; } .p4-msg.ng { color: #ff8a7a; }
+.p4 .ic { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
+.eqgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.slot { border: 1px solid #ffffff22; background: #0008; border-radius: 4px; padding: 3px 5px; min-height: 52px; font-size: 12px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.slot.on { border-color: #d9b45e; cursor: pointer; } .slot.on:hover { background: #d9b45e22; } .slot small { color: #9aa4c8; font-size: 10px; } .slot span { font-size: 11px; line-height: 1.2; } .none { color: #666c88; }
+.stats { margin: 8px 0 4px; font-size: 13px; } .stats b { color: #fff4cc; font-weight: normal; margin-left: 2px; } .stats i { color: #8fd08f; font-style: normal; font-size: 11px; margin-right: 8px; } .g { float: right; color: #ffe08a; }
+.cap { font-size: 12px; color: #c8d0f0; margin: 6px 0 4px; } .cap small { color: #8a90b0; }
+.items { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.items .it { margin: 0; display: grid; grid-template-columns: 32px 1fr auto; grid-template-rows: auto auto; column-gap: 6px; text-align: left; padding: 4px 6px; background: #ffffff0d; border: 1px solid #ffffff22; border-radius: 4px; font-size: 13px; }
+.items .it:hover { background: #d9b45e22; border-color: #d9b45e; } .it .ic { grid-row: 1 / 3; } .it .sub { grid-column: 2 / 4; font-size: 10px; color: #9aa4c8; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .it .q { color: #ffe08a; }
+.it.r-rare .nm { color: #8fd0ff; } .it.r-epic .nm { color: #d08fff; }
+.tabs { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; } .tabs button { margin: 0; padding: 4px 16px; font-size: 14px; background: #151b30; } .tabs button.on { background: #2c3a66; color: #ffe08a; } .tabs .g { margin-left: auto; }
+.rc { display: grid; grid-template-columns: 32px 150px 1fr auto; gap: 8px; align-items: center; padding: 5px 4px; border-bottom: 1px solid #ffffff14; font-size: 13px; } .rc.dim { opacity: .55; }
+.rc .rn small { display: block; font-size: 10px; color: #9aa4c8; } .rc .rn b { color: #ffe08a; font-weight: normal; }
+.rc .mats { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; } .rc .mats span { display: inline-flex; align-items: center; gap: 2px; } .rc .mats .ic { width: 20px; height: 20px; } .rc .mats .lack { color: #ff8a7a; }
+.rc button { margin: 0; padding: 4px 12px; font-size: 13px; } .rc button:disabled { opacity: .4; cursor: default; }
+.job { background: #2a3a1a; border: 1px solid #8fd08f; border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; font-size: 14px; } .job button { margin: 0 0 0 8px; padding: 3px 10px; font-size: 13px; }
+.note { font-size: 11px; color: #9aa4c8; margin-top: 6px; }

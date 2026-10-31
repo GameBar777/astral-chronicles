@@ -46,6 +46,12 @@ const scatter = (kind, n) => { for (let i = 0, tries = 0; i < n && tries < 2000;
   if (free(x, y, fw, fh)) { obj(kind, x, y); i++; } } };
 scatter('tree', 7); scatter('pine', 4); scatter('rocks', 7); scatter('stump', 4); scatter('berry_bush', 6); scatter('bush', 5);
 scatter('wildflowers', 26); scatter('grass_tuft', 34); scatter('flowers', 6);
+// PHASE 4 gathering nodes (solid). Ids/positions must match server/migrations/004 gathering_nodes seed (checked by test).
+export const NODES = [['node_copper_1', 'mining', 'node_copper', 12, 24], ['node_copper_2', 'mining', 'node_copper', 28, 30], ['node_iron_1', 'mining', 'node_iron', 44, 22],
+  ['node_wood_1', 'logging', 'node_logging', 20, 26], ['node_wood_2', 'logging', 'node_logging', 40, 9],
+  ['node_herb_1', 'herb', 'node_herb', 10, 10], ['node_herb_2', 'herb', 'node_herb', 24, 21], ['node_herb_3', 'herb', 'node_herb', 44, 28]];
+for (const [id, type, kind, tx, ty] of NODES) { if (!free(tx, ty, 1, 1)) throw new Error(`node ${id} not free`); used.add(`${tx},${ty}`); solid(tx, ty);
+  objects.push({ id, type: 'gather', kind, tx, ty, fw: 1, fh: 1, x: (tx + 0.5) * 32, y: (ty + 1) * 32, props: { gatherType: type } }); }
 // portal back to town: walking into the west road edge
 objects.push({ id: 'portal_to_asteria', type: 'portal', tx: 0, ty: 15, fw: 1, fh: 5, x: 16, y: 17.5 * 32, props: { to: 'asteria', spawn: { x: 41.5 * 32, y: 17.6 * 32 } } });
 // monster symbols roam inside this rect (tiles); server picks actual encounter (lead = touched symbol)

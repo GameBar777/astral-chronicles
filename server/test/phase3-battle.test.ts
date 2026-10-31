@@ -16,6 +16,7 @@ const user = async (email: string, cls: string) => {
   await call('POST', '/auth/register', { email, password: 'password123' }, '');
   const t = (await call('POST', '/auth/login', { email, password: 'password123' }, '')).body.token;
   const c = await call('POST', '/characters', { name: cls === 'warrior' ? 'Garo' : 'Mina', class: cls, appearance: { bodyType: 'a', hairStyle: 1, hairColor: 2, skinColor: 0 } }, t);
+  await pool.query(`UPDATE characters SET map_id='green_meadow', pos_x=112, pos_y=563 WHERE id=$1`, [c.body.id]); // PHASE 4: battles only in the zone you stand in
   return [t, c.body.id];
 };
 /** Win quickly: boost ATK so one hit KOs; rng 0.5 => 1 enemy chosen deterministically. */
@@ -34,7 +35,7 @@ describe('PHASE 3 battle API (server-authoritative)', () => {
   it('master data seeded: 5 meadow monsters, drops, starter potions x3', async () => {
     expect((await pool.query(`SELECT count(*)::int n FROM monster_definitions WHERE 'green_meadow'=ANY(spawn_areas)`)).rows[0].n).toBe(5);
     expect(await potions()).toBe(3);
-    expect((await call('GET', `/characters/${CH}/inventory`)).body).toEqual([{ item_id: 'potion_small', name: 'やくそう', category: 'consumable', qty: 3 }]);
+    expect((await call('GET', `/characters/${CH}/inventory`)).body).toContainEqual({ item_id: 'potion_small', name: 'やくそう', category: 'consumable', qty: 3 });
   });
   it('start: validates zone / ownership; enemies 1-3; rewards hidden from client', async () => {
     expect((await call('POST', '/battles', { characterId: CH, zone: 'nowhere' })).body.error).toBe('invalid_zone');

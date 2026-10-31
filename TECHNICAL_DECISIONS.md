@@ -19,3 +19,9 @@
 | TD-008 | 2026-10-31 | テストDBは `astral_test` を毎回スキーマ再作成。日本語フォントは DotGothic16（@fontsource, SIL OFL 1.1）を同梱し、ゲーム開始前に `document.fonts.load` | BUG-002 対策。OFLは商用同梱可 |
 | TD-009 | 2026-10-31 | 名前検証: NFKC正規化+trim、2〜12コードポイント、ひらがな/カタカナ/漢字/英数字/ー・のみ、数字のみ不可、禁止語は英字=単語単位・日本語=部分一致（大小無視、BUG-005）、重複はDBの lower(name) UNIQUE | クライアント検証はUX用、サーバーが正 |
 | TD-010 | 2026-10-31 | アート: GenerateImage でオリジナル画像（マゼンタ背景）を生成し `assets/raw/` に保存、`scripts/cut-sprites.py` でキー抜き・連結成分切出し・縮小し `client/public/sprites/` へ。32pxグリッド基準（家5〜6タイル幅、小物1タイル）。参考画像は様式参照のみで切り貼りしない。地面は256pxシームレステクスチャをマスク合成。カメラズーム1.5 | 素材の権利: AI生成物の商用利用方針は**ユーザー確認待ち** |
+
+## TD-011 戦闘ルール（PHASE 3）
+- 戦闘状態は battle_logs.state(JSONB) にサーバー保持、アクションは FOR UPDATE トランザクション＋turn番号一致必須（不一致409 stale_turn）
+- 報酬は rewards_committed フラグ＋transactions 'battle:<id>' の ON CONFLICT で二重付与防止
+- 切断: 30分以内は再開、超過は放棄（abort）。アクティブ戦闘はキャラ毎1件（部分ユニーク索引）
+- 敗北: HP最大値の30%で復帰、アステリアへ。逃走式・防御(かばう)は shared/battle.ts 準拠

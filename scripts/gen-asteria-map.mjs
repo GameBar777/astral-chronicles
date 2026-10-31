@@ -42,14 +42,15 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   if (edge && !exitAt(x, y) && (x + y * 3) % 2 === 0) obj((x * 7 + y) % 3 ? 'tree' : 'pine', x, y);
   else if (edge && !exitAt(x, y)) col[y * W + x] = 1; // solid hedge between trunks
 }
-// map edges remain solid even at exits (until portals are implemented)
-for (let x = 0; x < W; x++) { col[x] = 1; col[(H - 1) * W + x] = 1; } for (let y = 0; y < H; y++) { col[y * W] = 1; col[y * W + W - 1] = 1; }
+// map edges solid except the east exit (portal to green_meadow, PHASE 3)
+for (let x = 0; x < W; x++) { col[x] = 1; col[(H - 1) * W + x] = 1; } for (let y = 0; y < H; y++) { col[y * W] = 1; if (y < 16 || y > 18) col[y * W + W - 1] = 1; }
 [[5, 10], [36, 17], [37, 27], [14, 29], [34, 3], [6, 14], [39, 10]].forEach(([x, y], i) => obj(i % 2 ? 'pine' : 'tree', x, y));
 objects.push({ id: 'npc_guild_receptionist', type: 'npc', x: 11.5 * 32, y: 10.6 * 32, props: { name: 'ギルド受付 ミーナ' } });
 // decorative townsfolk NPCs (static; no dialogue yet)
 [['npc_guard_leon', 18.2, 19.4, '衛兵 レオン', 'knight'], ['npc_traveler_aria', 26.5, 16.2, '旅人 アリア', 'mage'], ['npc_smith_gord', 30.5, 10.6, '鍛冶屋 ゴルド', 'warrior']]
   .forEach(([id, x, y, name, sheet]) => objects.push({ id, type: 'npc', x: x * 32, y: y * 32, props: { name, sheet } }));
-objects.push({ id: 'portal_to_meadow', type: 'portal', x: (W - 1) * 32, y: 17 * 32, props: { to: 'green_meadow', placeholder: true } });
+objects.push({ id: 'portal_to_meadow', type: 'portal', tx: W - 1, ty: 16, fw: 1, fh: 3, x: (W - 1) * 32, y: 17 * 32, props: { to: 'green_meadow', spawn: { x: 3.5 * 32, y: 17.6 * 32 } } });
+objects.push({ id: 'sign_to_meadow', type: 'deco', kind: 'sign', tx: W - 4, ty: 14, fw: 1, fh: 1, x: (W - 3.5) * 32, y: 15 * 32, label: 'みどりの草原 →' }); col[14 * W + W - 4] = 1;
 const map = { id: 'asteria', name: '始まりの街 アステリア', projection: 'oblique_3_4', width: W, height: H, tilewidth: 32, tileheight: 32,
   recommendedLevel: [1, 5], spawn: { x: 22.5 * 32, y: 21.8 * 32 },
   layers: [{ name: 'ground', data: ground }, { name: 'collision', data: col }], objects,

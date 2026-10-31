@@ -5,7 +5,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { pool } from './db/pool.js';
 import { apiRouter } from './http/api.js';
 
-export function createGameServer(opts: { authLimit?: number; createLimit?: number } = {}) {
+export function createGameServer(opts: { authLimit?: number; createLimit?: number; battleLimit?: number } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api', apiRouter(opts));

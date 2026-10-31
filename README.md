@@ -43,3 +43,6 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 ## API（PHASE 2）
 `GET /api/classes` `GET /api/exp-table` `POST /api/auth/register|login` `POST /api/auth/logout`※ `GET /api/me`※ `GET|POST /api/characters`※（※ `Authorization: Bearer <token>`）
 テストはDB `astral_test` を毎回作り直す（`npm test`）。開発時は Vite が `/api` を `localhost:2567` にプロキシ。
+
+### PHASE 3
+`npm run migrate -w @astral/server`（003適用）→ サーバー/クライアント起動 → アステリア東口から草原へ。E2E: `cd client && node e2e/phase3.mjs`

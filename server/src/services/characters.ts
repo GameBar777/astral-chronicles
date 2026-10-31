@@ -28,6 +28,7 @@ export async function createCharacter(userId: string, body: any) {
     await c.query(`INSERT INTO character_stats(character_id,hp,max_hp,mp,max_mp,str,vit,"int",agi,luk,atk,def,matk,mdef)
       VALUES($1,$2,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [id, st.maxHp, st.maxMp, st.str, st.vit, st.int, st.agi, st.luk, st.atk, st.def, st.matk, st.mdef]);
     for (const sk of CLASSES[cls].startingSkills) await c.query('INSERT INTO character_skills(character_id,skill_id) VALUES($1,$2)', [id, sk]);
+    await c.query("INSERT INTO inventory(character_id,item_id,quantity) VALUES($1,'potion_small',3)", [id]); // PHASE 3 starter items
     await c.query('COMMIT');
     return (await listCharacters(userId)).find((x) => x.id === id)!;
   } catch (e: any) {

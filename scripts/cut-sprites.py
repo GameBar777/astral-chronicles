@@ -79,3 +79,21 @@ _d = 'client/public/sprites/'
 _f = Image.open(_d + 'fence_h.png'); _v = Image.new('RGBA', (32, _f.size[1])); _p = _f.crop((0, 0, 12, _f.size[1])); _v.paste(_p, (10, 0), _p); _v.save(_d + 'fence_v.png')
 _g = Image.open(_d + 'ground.png').convert('RGB'); _gr = _g.crop((0, 0, 256, 256))
 _gr = ImageEnhance.Brightness(ImageEnhance.Color(_gr).enhance(0.8)).enhance(0.88); _g.paste(_gr, (0, 0)); _g.save(_d + 'ground.png')
+
+def main_blob(im):
+    a=np.asarray(im).copy(); lab,n=ndimage.label(a[...,3]>0)
+    if n>1:
+        sizes=ndimage.sum(np.ones_like(lab),lab,range(1,n+1)); keep=np.isin(lab,[i+1 for i,s in enumerate(sizes) if s>=0.02*sizes.max()]); a[~keep,3]=0
+    return tight(Image.fromarray(a,'RGBA'))
+# --- PHASE 3: monsters (battle sprites), meadow props, battle background ---
+report.clear()
+im,fg=key(Image.open(f'{RAW}/monsters.jpg')); bs=comps(fg, 3000, 8, 1000)
+print('monsters', len(bs))
+for n,b in zip(['slime','horn_rabbit','mushroom','goblin','wild_dog'], bs):
+    p=main_blob(tight(crop(im,b))); save(f'mon_{n}', shrink(p, h={'slime':56,'horn_rabbit':72,'mushroom':72,'goblin':84,'wild_dog':80}[n]))
+im,fg=key(Image.open(f'{RAW}/meadow_props.jpg')); bs=comps(fg, 3000, 8, 300)
+print('meadow props', len(bs))
+for n,b in zip(['oak','boulder','rocks','grass_tuft','wildflowers','stump','signpost','berry_bush'], bs):
+    p=tight(crop(im,b)); save(n, shrink(p, h={'oak':100,'boulder':48,'rocks':36,'grass_tuft':30,'wildflowers':28,'stump':34,'signpost':52,'berry_bush':36}[n]))
+bg=Image.open(f'{RAW}/battle_meadow.jpg').convert('RGB').resize((512,288), Image.BOX); save('battle_meadow', bg)
+print('\n'.join(report))

@@ -1,0 +1,15 @@
+{
+  "name": "astral-chronicles",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/shared", "server", "client"],
+  "scripts": {
+    "build": "npm run build -w @astral/shared && npm run build -w @astral/server && npm run build -w @astral/client",
+    "test": "npm test -w @astral/shared && npm test -w @astral/server",
+    "db:start": "bash scripts/db-start.sh",
+    "db:stop": "bash scripts/db-stop.sh",
+    "db:migrate": "npm run migrate -w @astral/server",
+    "dev:server": "npm run dev -w @astral/server",
+    "dev:client": "npm run dev -w @astral/client"
+  }
+}

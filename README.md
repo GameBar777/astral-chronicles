@@ -1,0 +1,40 @@
+# ASTRAL CHRONICLES（仮称）
+2DオンラインMMORPG。仕様の正本: `docs/SPEC_v1.0_original.txt` / 要約: `PROJECT_MASTER.md` / 進捗: `DEVELOPMENT_STATUS.md`
+
+## 構成（npm workspaces モノレポ）
+```
+packages/shared  共有型・移動/衝突ロジック（クライアント/サーバー共通）
+server           Node + TS + Colyseus 0.16 + PostgreSQL(pg)。migrations/ にSQL
+client           Phaser 3.90 + TS + Vite
+assets/maps      マップJSON（Tiled互換サブセット）。現在は仮マップ
+scripts          DB起動/停止/バックアップ、仮マップ生成
+docs             環境調査、スクリーンショット、仕様原文
+```
+
+## 起動方法（開発環境）
+```bash
+npm install
+cp .env.example .env        # DATABASE_URL / JWT_SECRET を設定
+npm run db:start            # PostgreSQL (PG_BIN, port 5433)
+npm run db:migrate          # マイグレーション適用（冪等）
+npm run dev:server          # Colyseus :2567  (GET /health)
+npm run dev:client          # Vite :5173
+```
+初回のみPostgreSQLクラスタ作成: `$PG_BIN/initdb -D .pgdata -U astral -A scram-sha-256 --pwprompt -E UTF8` → `createdb -h 127.0.0.1 -p 5433 -U astral astral`
+（DockerがないためPostgreSQLバイナリは `@embedded-postgres/linux-x64` から取得。Docker環境では `postgres:17` イメージで代替可）
+
+## テスト
+```bash
+npm test                         # shared(ユニット) + server(DBスキーマ, 起動)
+npm run build                    # 全パッケージ型チェック+ビルド
+node client/e2e/phase1.mjs       # PHASE1ブラウザE2E（dev:client起動中に実行）
+```
+
+## 環境変数
+`.env.example` 参照。秘密情報は `.env`（git管理外）のみ。クライアントには `VITE_*` 以外は露出しない。
+
+## バックアップ / 復旧
+`scripts/db-backup.sh` → `backups/*.dump`。復旧: `pg_restore -h 127.0.0.1 -p 5433 -U astral -d astral --clean <file>`
+
+## デプロイ
+未整備（PHASE 10）。本番環境の分離、TLS(wss)終端、Dockerfile は未作成。

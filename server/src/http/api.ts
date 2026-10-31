@@ -9,6 +9,8 @@ import { listRecipes, startCraft, claimCraft, activeJob, enhance, enhanceInfo } 
 import { listQuests, acceptQuest, turnInQuest } from '../services/quests.js';
 import { shopList, buy, sell, rest } from '../services/npc.js';
 import { rateLimit } from './rateLimit.js';
+import { hub } from '../rooms/hub.js';
+import * as S from '../services/social.js';
 type Authed = Request & { auth: { sessionId: string; userId: string; role: string } };
 const wrap = (fn: (req: any, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
 const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
@@ -31,10 +33,12 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   // PHASE 3 battle (server-authoritative). Client sends only commands; damage/rewards are computed here.
   const battleRl = rateLimit('battle', opts.battleLimit ?? 120, 60_000);
   r.get('/characters/:id/battle', auth, wrap(async (req: Authed, res) => res.json({ battle: await activeBattle(req.auth.userId, String(req.params.id)) })));
-  r.post('/battles', auth, battleRl, wrap(async (req: Authed, res) => res.status(201).json(await startBattle(req.auth.userId, String(req.body?.characterId ?? ''), String(req.body?.zone ?? ''), typeof req.body?.lead === 'string' ? req.body.lead : undefined))));
+  r.post('/battles', auth, battleRl, wrap(async (req: Authed, res) => { const b = await startBattle(req.auth.userId, String(req.body?.characterId ?? ''), String(req.body?.zone ?? ''), typeof req.body?.lead === 'string' ? req.body.lead : undefined); hub.setBattle(String(req.body.characterId), true); res.status(201).json(b); }));
   r.post('/battles/:id/action', auth, battleRl, wrap(async (req: Authed, res) => {
     if (!Number.isInteger(req.body?.turn) || typeof req.body?.command !== 'object') throw new HttpError(400, 'invalid_request');
-    res.json(await act(req.auth.userId, String(req.params.id), req.body.turn, req.body.command));
+    const b: any = await act(req.auth.userId, String(req.params.id), req.body.turn, req.body.command);
+    if (b.status !== 'active') { const cid = b.combatants.find((x: any) => x.side === 'player')?.characterId; if (cid) hub.setBattle(cid, false); }
+    res.json(b);
   }));
   // PHASE 4: items / equipment / gathering / crafting / enhancement / position — all server-authoritative.
   const actRl = rateLimit('action', opts.actionLimit ?? 180, 60_000), moveRl = rateLimit('move', opts.moveLimit ?? 400, 60_000);
@@ -61,6 +65,15 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.get('/characters/:id/quests', auth, wrap(async (req: Authed, res) => res.json(await listQuests(U(req), P(req)))));
   r.post('/characters/:id/quests/:questId/accept', auth, actRl, wrap(async (req: Authed, res) => res.json(await acceptQuest(U(req), P(req), String(req.params.questId), B(req).requestId))));
   r.post('/characters/:id/quests/:questId/complete', auth, actRl, wrap(async (req: Authed, res) => res.json(await turnInQuest(U(req), P(req), String(req.params.questId), B(req).requestId))));
+  // PHASE 7: social (friends / party / guild). Chat itself goes over the room socket.
+  const socRl = rateLimit('social', opts.actionLimit ?? 180, 60_000);
+  const soc = (path: string, fn: (u: string, c: string, b: any) => Promise<unknown>) => r.post(`/characters/:id/${path}`, auth, socRl, wrap(async (req: Authed, res) => res.json(await fn(U(req), P(req), B(req)))));
+  r.get('/characters/:id/social', auth, wrap(async (req: Authed, res) => res.json(await S.socialView(U(req), P(req)))));
+  soc('friends/request', (u, c, b) => S.friendRequest(u, c, b.name)); soc('friends/accept', (u, c, b) => S.friendAccept(u, c, b.characterId)); soc('friends/remove', (u, c, b) => S.friendRemove(u, c, b.characterId));
+  soc('party/create', (u, c) => S.partyCreate(u, c)); soc('party/invite', (u, c, b) => S.partyInvite(u, c, b.name)); soc('party/accept', (u, c, b) => S.partyAccept(u, c, b.partyId));
+  soc('party/leave', (u, c) => S.partyLeave(u, c)); soc('party/kick', (u, c, b) => S.partyKick(u, c, b.characterId)); soc('party/leader', (u, c, b) => S.partyPromote(u, c, b.characterId));
+  soc('invites/decline', (u, c, b) => S.inviteDecline(u, c, b.kind, b.id));
+  soc('guild/create', (u, c, b) => S.guildCreate(u, c, b.name)); soc('guild/invite', (u, c, b) => S.guildInvite(u, c, b.name)); soc('guild/accept', (u, c, b) => S.guildAccept(u, c, b.guildId)); soc('guild/leave', (u, c) => S.guildLeave(u, c));
   r.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof HttpError) return void res.status(err.status).json({ error: err.code });
     if (err?.type === 'entity.parse.failed') return void res.status(400).json({ error: 'invalid_json' });

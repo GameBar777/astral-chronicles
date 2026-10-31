@@ -7,6 +7,7 @@ import type { BattleView } from './BattleScene';
 import { openInventory, closePanel, panelOpen, newRequestId } from '../panels';
 import { openDialog, openQuests } from '../npcpanels';
 import { Presence } from '../net';
+import { toggleSocial } from '../social';
 const FACE4: Record<Direction, string> = { s: 'down', n: 'up', w: 'left', nw: 'left', sw: 'left', e: 'right', ne: 'right', se: 'right' };
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
@@ -77,6 +78,7 @@ export class WorldScene extends Phaser.Scene {
     this.events.once('shutdown', () => { this.presence?.close(); this.presence = undefined; });
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
+    this.input.keyboard!.addKey(K.O).on('down', () => toggleSocial());
     this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
     this.input.keyboard!.addKey(K.L).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openQuests(null, this.character, (c) => this.onCharacter(c)); });
     this.keyE.on('down', () => this.interact()); this.keyI.on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openInventory(this.character, (c) => this.onCharacter(c)); });

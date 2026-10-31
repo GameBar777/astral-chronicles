@@ -66,3 +66,15 @@
 - テスト: shared 54 / server 55 全通過、E2E phase2 19/19・phase3 20/20（今回10連続）・phase4 16/16・phase5 16/16・phase6 11/11
 - スクショ: docs/screenshots/phase6-two-clients-a.png / phase6-two-clients-b.png
 - 制約: 負荷試験はローカル単一プロセス・10人のみ。チャットのサーバー配信、戦闘中プレイヤーの表示状態は未実装
+
+## PHASE 7 ソーシャル（2026-11-01）完了
+- チャット: Local（同マップのルーム配信）/Party/Guild（メンバーのみ hub 経由配信）/System（受信専用・サーバー通知）を WorldRoom 'chat' で実送受信、chat_messages に保存、入室時に直近30件の履歴送信。HTMLエスケープ・制御/双方向文字除去・1〜200字
+- スパム対策: 10秒5件、15秒以内同文は重複、60秒内3違反で30秒ミュート（サーバー判定）
+- フレンド: 申請/承認（相互申請は自動成立）/削除、オンライン・現在マップ・戦闘中表示
+- パーティー: 作成/招待(10分有効)/参加/辞退/脱退/追放/リーダー譲渡、最大4人（行ロックで同時参加でも超過しない）、リーダー脱退時は最古参が昇格、最後の1人で解散
+- ギルド: 作成/招待(leader・officer)/参加/脱退（PHASE 7範囲外だがチャット用に最小実装）
+- 戦闘中表示: 戦闘開始/終了でルーム状態 inBattle を更新、他プレイヤー名札に「⚔」、パーティー/フレンド一覧に「⚔戦闘中」
+- UI: [O] でソーシャルパネル、チャットタブに送信エラー表示
+- テスト: server 63/63（phase7-social 8件追加）、E2E phase7 27/27（3ブラウザ同時）、回帰 phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11
+- スクショ: docs/screenshots/phase7-chat-local.png / phase7-party.png / phase7-friends.png / phase7-chat-guild.png / phase7-chat-spam.png / phase7-in-battle.png
+- 未実装: ギルドの役職変更・解散UI、フレンドのブロック、ウィスパー、ミュート状態の永続化（再起動で解除）、PHASE 8 は未着手

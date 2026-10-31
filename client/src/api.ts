@@ -10,6 +10,10 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   return j;
 }
 export const ERR_JA: Record<string, string> = {
+  target_not_found: 'そのキャラクターは見つかりません', self: '自分自身は指定できません', already_requested: '申請済みです', already_friends: 'すでにフレンドです', not_leader: 'リーダーのみ可能です',
+  party_full: 'パーティーは満員です（最大4人）', target_in_party: '相手は別のパーティーにいます', already_in_party: 'すでにパーティーに参加しています', invite_not_found: '招待が見つからないか期限切れです',
+  not_in_party: 'パーティーに参加していません', not_in_guild: 'ギルドに所属していません', not_officer: '権限がありません', guild_name_taken: 'そのギルド名は使用されています',
+  invalid_guild_name: 'ギルド名は2〜16文字（記号不可）', already_in_guild: 'すでにギルドに所属しています', target_in_guild: '相手は別のギルドに所属しています', invalid_name: '名前を入力してください',
   invalid_email: 'メールアドレスの形式が正しくありません', invalid_password: 'パスワードは8〜72バイトで入力してください', email_taken: 'このメールアドレスは登録済みです',
   invalid_credentials: 'メールアドレスまたはパスワードが違います', banned: 'このアカウントは利用停止中です', rate_limited: '操作が多すぎます。しばらく待ってください',
   unauthorized: 'ログインし直してください', name_too_short: '名前は2文字以上にしてください', name_too_long: '名前は12文字以内にしてください',

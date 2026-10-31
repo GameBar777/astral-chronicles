@@ -1,4 +1,6 @@
 # NEXT TASKS（優先順）
+0. **PHASE 8（未着手）**: インスタンスダンジョン、ボスのフェーズ制、パーティー戦闘、全員報酬と二重受取防止（dungeon_instances.rewards_claimed / battle_logs.rewards_committed を利用予定）
+0. PHASE 7 残: ギルド役職/解散UI、ブロック、ウィスパー、ミュート永続化、BUG-019
 1. **PHASE 3: 戦闘基礎** — フィールド「緑の草原」マップ、フィールドシンボルエンカウント、コマンド選択式ターン制戦闘（SECTION 08 の式、サーバー確定）、EXP/ドロップ付与（`grantExp`使用）、レベルアップ演出の画面確認
 2. PHASE 4 先行: Colyseus `onAuth` でセッション検証、位置のサーバー権威同期と保存
 3. マスターデータ seed（is_dummy で区別）

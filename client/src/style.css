@@ -84,3 +84,10 @@ button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
 .p4 .rc.q { align-items: center; } .p4 .rc.q small { display: block; margin-top: 2px; } .p4 .rw { color: #ffe08a; } .p4 .st { display: inline !important; padding: 0 6px; border-radius: 3px; background: #2a2f44; }
 .p4 .st-active { color: #9ad0ff; } .p4 .st-rewarded, .p4 .st-done_today { color: #9af0a0; } .p4 .none { padding: 16px; opacity: .7; text-align: center; }
 .p4 .rc.q { display: flex; gap: 10px; grid-template-columns: none; } .p4 .rc.q .rn { flex: 1; min-width: 0; } .p4 .rc.q button { flex: none; }
+/* ---- PHASE 7 chat + social ---- */
+#chat .c-err{color:#ff8a7a;font-size:11px;min-height:0;padding:0 8px} #chat .c-ch{font-size:11px} #chat .c-party{color:#8ff0b0} #chat .c-guild{color:#d6a0ff} #chat .tabs button.new{color:#ff9a6a}
+#social{pointer-events:auto;left:16px;right:auto;top:56px;width:min(430px,94vw)} #social h4{margin:10px 0 4px;color:#ffe08a;font-size:14px;border-bottom:1px solid #8a6a2e55}
+#social .s-row{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:14px;flex-wrap:wrap} #social .s-row small{color:#b8b0a0} #social button{margin:2px;padding:2px 8px;font-size:12px}
+#social .s-on{color:#7af07a} #social .s-off{color:#777} #social .s-bt{color:#ff8a5a;margin-left:3px;font-size:12px} #social .s-lead{color:#ffd700} #social .s-none{color:#9a9488;font-size:13px}
+#social input{padding:3px 6px;font-size:13px;background:#080b16;border:1px solid #5a6090;color:#fff;width:120px} #social .s-inv{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:6px}
+#social.hidden{display:none}

@@ -4,15 +4,17 @@ import { pool } from '../db/pool.js';
 import { resolveSession } from '../services/auth.js';
 import { updatePosition } from '../services/world.js';
 import { MAPS } from '../world/maps.js';
+import { hub } from './hub.js';
+import { postChat, chatHistory, friendsOf } from '../services/social.js';
 /**
  * PHASE 6 shared map room (one per mapId via filterBy). Auth = the same session token as the REST API.
  * Positions are server-authoritative: a "move" is validated by updatePosition (map/collision/speed, DB-stored) before it is
  * written into the synced state; rejected moves get a "correct" message with the stored position.
  */
 // NOTE: `declare` fields (no initializers) so class-field semantics don't shadow the schema accessors
-export class Player extends Schema { declare id: string; declare name: string; declare cls: string; declare x: number; declare y: number; declare facing: string; declare moving: boolean;
-  constructor() { super(); this.facing = 'down'; this.moving = false; } }
-defineTypes(Player, { id: 'string', name: 'string', cls: 'string', x: 'number', y: 'number', facing: 'string', moving: 'boolean' });
+export class Player extends Schema { declare id: string; declare name: string; declare cls: string; declare x: number; declare y: number; declare facing: string; declare moving: boolean; declare inBattle: boolean;
+  constructor() { super(); this.facing = 'down'; this.moving = false; this.inBattle = false; } }
+defineTypes(Player, { id: 'string', name: 'string', cls: 'string', x: 'number', y: 'number', facing: 'string', moving: 'boolean', inBattle: 'boolean' });
 export class WorldState extends Schema { declare mapId: string; declare players: MapSchema<Player>; constructor() { super(); this.mapId = ''; this.players = new MapSchema<Player>(); } }
 defineTypes(WorldState, { mapId: 'string', players: { map: Player } });
 type Auth = { userId: string; characterId: string; name: string; cls: string; x: number; y: number };
@@ -29,6 +31,7 @@ export class WorldRoom extends Room<WorldState> {
     this.setState(new WorldState()); this.state.mapId = opts.mapId;
     this.setPatchRate(50);
     this.onMessage('move', (client, m) => this.move(client, m));
+    this.onMessage('chat', (client, m) => this.chat(client, m));
   }
   async onAuth(_client: Client, opts: { token?: string; characterId?: string; mapId?: string }) {
     const s = await resolveSession(opts?.token);
@@ -45,6 +48,17 @@ export class WorldRoom extends Room<WorldState> {
     });
     const p = new Player(); Object.assign(p, { id: a.characterId, name: a.name, cls: a.cls, x: a.x, y: a.y });
     this.state.players.set(client.sessionId, p);
+    hub.set(a.characterId, { client, room: this, mapId: this.state.mapId });
+    pool.query('SELECT 1 FROM battle_logs WHERE character_id=$1 AND result IS NULL', [a.characterId]).then((r) => { if (r.rowCount) hub.setBattle(a.characterId, true); }).catch(() => {});
+    chatHistory(a.characterId, this.state.mapId).then((h) => client.send('chat_history', h)).catch(() => {});
+    friendsOf(a.characterId).then((f) => hub.send(f, 'social', {})).catch(() => {}); // friends' lists show online
+  }
+  setInBattle(sessionId: string, v: boolean) { const p = this.state.players.get(sessionId); if (p) p.inBattle = v; }
+  private async chat(client: Client, m: any) {
+    const a = client.auth as Auth; if (!a || !this.state.players.has(client.sessionId)) return;
+    const r = await postChat({ id: a.characterId, name: a.name }, this.state.mapId, m?.channel, m?.body).catch(() => ({ error: 'internal' } as any));
+    if ('error' in r) return client.send('chat_error', { code: r.error, channel: m?.channel });
+    if (r.to) hub.send(r.to, 'chat', r.msg); else this.broadcast('chat', r.msg);
   }
   private async move(client: Client, m: any) {
     const a = client.auth as Auth, p = this.state.players.get(client.sessionId); if (!a || !p) return;
@@ -67,8 +81,9 @@ export class WorldRoom extends Room<WorldState> {
     if (p && !consented && !this.kicked.delete(client.sessionId)) {
       p.moving = false;
       const d = this.allowReconnection(client, RECONNECT_SEC); this.grace.set(client.sessionId, d as any);
-      try { await d; this.grace.delete(client.sessionId); return; } catch { this.grace.delete(client.sessionId); /* timed out or superseded */ }
+      try { const nc = await d; this.grace.delete(client.sessionId); hub.set(p.id, { client: nc, room: this, mapId: this.state.mapId }); return; } catch { this.grace.delete(client.sessionId); /* timed out or superseded */ }
     }
+    if (p) { hub.remove(p.id, client); friendsOf(p.id).then((f) => hub.send(f, 'social', {})).catch(() => {}); }
     this.state.players.delete(client.sessionId); this.busy.delete(client.sessionId); this.pending.delete(client.sessionId);
   }
 }

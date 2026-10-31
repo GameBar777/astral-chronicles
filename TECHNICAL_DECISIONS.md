@@ -42,3 +42,9 @@
 - 位置の正はDB＋サーバー検証。ルームの move は1件処理中＋最新1件のみ保留（合体）でDB書込みを抑制。強制同期（会話・採集・ポータル前）は HTTP のまま
 - 接続先 `ws://<host>:2567`（VITE_GAME_WS で上書き）。Vite プロキシは /api のみ
 - 再接続猶予15秒。同キャラの新規参加時は猶予中の旧席を reject して削除（ゴースト防止）
+
+## TD-015 ソーシャル/チャット（PHASE 7）
+- チャットは Colyseus WorldRoom のメッセージ、ソーシャル操作は REST + サーバーからの 'social' プッシュ（クライアントは再取得）
+- server/src/rooms/hub.ts: characterId→接続のプロセス内レジストリ。Party/Guild/System 配信と戦闘中フラグに使用。単一プロセス前提（複数ノード化時は Redis presence へ置換）
+- スパム判定はメモリ内（プロセス単位）。Local は channel 'say'、scope=mapId で保存
+- 招待は social_invites（migration 006）、party_members.character_id にユニーク制約

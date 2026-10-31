@@ -77,3 +77,10 @@ button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
 .rc button { margin: 0; padding: 4px 12px; font-size: 13px; } .rc button:disabled { opacity: .4; cursor: default; }
 .job { background: #2a3a1a; border: 1px solid #8fd08f; border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; font-size: 14px; } .job button { margin: 0 0 0 8px; padding: 3px 10px; font-size: 13px; }
 .note { font-size: 11px; color: #9aa4c8; margin-top: 6px; }
+/* PHASE 5 dialogue / shop / quests */
+.p4.dlg { top: auto; bottom: 24px; right: 50%; transform: translateX(50%); width: min(720px, 94vw); }
+.dlg-row { display: flex; gap: 14px; align-items: flex-start; } .dlg-row .portrait { width: 72px; height: 90px; image-rendering: pixelated; background: #0d1224; border: 1px solid #8a6a2e; border-radius: 4px; }
+.dlg-text { font-size: 18px; line-height: 1.6; padding-top: 6px; } .dlg-opts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; } .dlg-opts button { margin: 0; }
+.p4 .rc.q { align-items: center; } .p4 .rc.q small { display: block; margin-top: 2px; } .p4 .rw { color: #ffe08a; } .p4 .st { display: inline !important; padding: 0 6px; border-radius: 3px; background: #2a2f44; }
+.p4 .st-active { color: #9ad0ff; } .p4 .st-rewarded, .p4 .st-done_today { color: #9af0a0; } .p4 .none { padding: 16px; opacity: .7; text-align: center; }
+.p4 .rc.q { display: flex; gap: 10px; grid-template-columns: none; } .p4 .rc.q .rn { flex: 1; min-width: 0; } .p4 .rc.q button { flex: none; }

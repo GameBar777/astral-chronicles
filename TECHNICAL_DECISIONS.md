@@ -31,3 +31,8 @@
 - 戦闘ドロップは枠上限を無視（取りこぼし防止）、採集/製作/使用は上限厳守で `inventory_full`。
 - 冪等性: クライアント生成 requestId を `transactions(req:<id>)` に結果ごと保存し、同キャラ行ロック下で再送時は同結果を返す（別種別の再利用は409）。
 - 位置: PUT position を400ms間隔、速度上限 `PLAYER_SPEED·dt·1.35+40`（dt≤5s）と通行判定で拒否→サーバー座標へ補正。マップ遷移はポータル矩形内にいる場合のみ。
+
+## TD-013 NPC・クエスト（PHASE 5）
+- NPC定義（台詞/サービス）は @astral/shared npcs.ts、位置はマップJSON（サーバーが距離判定に使用、NPC_RANGE=80）
+- 品揃えは shop_items テーブル。クエスト進捗は character_quests.progress（`kill:<monster>`）を戦闘勝利コミット時にサーバーが加算
+- 報酬は status 遷移（active→rewarded, 行ロック）と transactions 一意キーの二重ガード。デイリーは rewarded_at を JST 日付で判定

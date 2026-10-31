@@ -6,3 +6,4 @@ export * from './leveling.js';
 export * from './validation.js';
 export * from './battle.js';
 export * from './items.js';
+export * from './npcs.js';

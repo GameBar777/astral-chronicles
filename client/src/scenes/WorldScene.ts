@@ -4,7 +4,8 @@ import asteria from '../../../assets/maps/asteria.json';
 import meadow from '../../../assets/maps/green_meadow.json';
 import { api, errText, session, type CharacterDto } from '../api';
 import type { BattleView } from './BattleScene';
-import { openInventory, openSmith, closePanel, panelOpen, newRequestId } from '../panels';
+import { openInventory, closePanel, panelOpen, newRequestId } from '../panels';
+import { openDialog, openQuests } from '../npcpanels';
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
 interface Symbol { s: Phaser.GameObjects.Image; sh: Phaser.GameObjects.Ellipse; id: string; pos: Vec2; v: Vec2; t: number }
@@ -46,7 +47,8 @@ export class WorldScene extends Phaser.Scene {
         const img = this.add.image(o.x, o.y, `sp_${o.kind}`).setOrigin(0.5, 1).setDepth(o.y);
         this.nodes.push({ id: o.id, x: o.x, y: o.y, img, type: String(o.props?.gatherType) });
       } else if (o.type === 'npc') {
-        this.add.sprite(o.x, o.y, `ch_${String(o.props?.sheet ?? 'priest')}`, 0).setOrigin(0.5, 1).setDepth(o.y);
+        const sheet = String(o.props?.sheet ?? 'priest');
+        this.add.sprite(o.x, o.y, `ch_${sheet}`, sheet.startsWith('npc_') ? undefined : 0).setOrigin(0.5, 1).setDepth(o.y);
         this.add.text(o.x, o.y - 62, String(o.props?.name ?? o.id), { fontFamily: FONT, fontSize: '12px', color: '#ffe08a', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(1e6);
       }
     }
@@ -60,6 +62,7 @@ export class WorldScene extends Phaser.Scene {
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
     this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
+    this.input.keyboard!.addKey(K.L).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openQuests(null, this.character, (c) => this.onCharacter(c)); });
     this.keyE.on('down', () => this.interact()); this.keyI.on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openInventory(this.character, (c) => this.onCharacter(c)); });
     this.events.once('shutdown', () => { closePanel(); this.keyE.removeAllListeners(); this.keyI.removeAllListeners(); });
     this.prompt = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#fff4cc', backgroundColor: '#3a2a14ee', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6 + 1).setVisible(false);
@@ -175,8 +178,7 @@ export class WorldScene extends Phaser.Scene {
     const t = this.nearest(); if (!t) return;
     await this.syncPosition(true); // gather/craft distance is checked against the server position
     if (t.kind === 'npc') {
-      if (t.npc.id === 'npc_smith_gord') openSmith(this.character, (c) => this.onCharacter(c));
-      else this.toast(`${String(t.npc.props?.name ?? '')}「ようこそ、旅の方。」`, '#2a3a6add');
+      openDialog(t.npc.id, this.character, (c) => this.onCharacter(c));
       return;
     }
     try {
@@ -247,6 +249,8 @@ export class WorldScene extends Phaser.Scene {
     this.syncT += dtMs;
     if (this.syncT >= POS_SYNC_MS || (!dir && this.syncT > 120)) { this.syncT = 0; this.syncPosition(); }
     const t = this.nearest();
+    // BUG-0xx fix: the targeted node is tinted and drawn above the player so a tall sprite cannot hide it
+    for (const n of this.nodes) { if (t?.kind === 'node' && t.node === n) n.img.setTint(0xfff3a0).setDepth(Math.max(n.y, this.pos.y + 0.1)); else n.img.clearTint().setDepth(n.y); }
     if (t) this.prompt.setText(t.kind === 'node' ? `E: 採集` : `E: 話す`).setPosition(t.x, t.y).setVisible(true); else this.prompt.setVisible(false);
     this.checkPortal();
   }

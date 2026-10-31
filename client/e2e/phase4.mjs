@@ -53,7 +53,7 @@ ok('portal -> green_meadow (server)', (await W()).map === 'green_meadow' && (awa
 await p.evaluate(() => { window.__astral.scene.getScene('World').cooldownUntil = 1e12; });
 
 // gathering
-await tp(336, 360); await p.waitForTimeout(400);
+await tp(366, 362); await p.waitForTimeout(400); // stand beside the node (BUG: standing on it hid the node)
 ok('gather prompt shown', /採集/.test(await p.evaluate(() => window.__astral.scene.getScene('World').prompt.text)));
 await p.keyboard.press('e'); await p.waitForTimeout(1200);
 const herb = (await db.query(`SELECT coalesce(sum(quantity),0)::int n FROM inventory WHERE character_id=$1 AND item_id='herb'`, [charId])).rows[0].n;
@@ -69,7 +69,7 @@ await tp(976, 380, 'asteria');
 await p.evaluate(() => { const s = window.__astral.scene.getScene('World'); s.scene.restart({ character: { ...s.character, map_id: 'asteria', pos_x: 976, pos_y: 380, gold: 2000 } }); });
 await p.waitForTimeout(1500); await p.evaluate(() => { window.__astral.scene.getScene('World').cooldownUntil = 1e12; });
 ok('talk prompt near smith', /話す/.test(await p.evaluate(() => window.__astral.scene.getScene('World').prompt.text)));
-await p.keyboard.press('e'); await p.waitForSelector('#p4 [data-tab]');
+await p.keyboard.press('e'); await p.waitForSelector('#p4 [data-o="smith"]'); await p.click('#p4 [data-o="smith"]'); await p.waitForSelector('#p4 [data-tab]');
 await p.screenshot({ path: SHOT + 'phase4-smith.png' });
 await p.click('#p4 [data-r="r_copper_dagger"]'); await p.waitForSelector('#p4 #claim');
 ok('craft job started (server)', (await db.query('SELECT count(*)::int n FROM crafting_jobs WHERE character_id=$1', [charId])).rows[0].n === 1);

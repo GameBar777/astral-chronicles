@@ -41,6 +41,9 @@ await p.waitForSelector('#b-cmd button'); await p.waitForTimeout(900);
 const bs = () => p.evaluate(() => { const s = window.__astral.scene.getScene('Battle'); return { id: s.b.id, turn: s.b.turn, status: s.b.status, enemies: s.b.combatants.filter((c) => c.side === 'enemy').map((c) => ({ id: c.id, m: c.monsterId, hp: c.hp, max: c.maxHp })), me: s.b.combatants.find((c) => c.side === 'player') }; });
 let B = await bs();
 ok('battle started by touching symbol; lead = slime', B.enemies[0].m === 'slime' && B.status === 'active', JSON.stringify(B.enemies));
+// FIX(phase3 flake): a crit could kill the lone slime on turn 1, ending the battle so the reload-resume step timed out. Make enemies tanky server-side.
+await db.query(`UPDATE battle_logs SET state = jsonb_set(state, '{combatants}', (SELECT jsonb_agg(CASE WHEN c->>'side'='enemy' THEN c || '{"hp":300}' ELSE c END) FROM jsonb_array_elements(state->'combatants') c)) WHERE id=$1`, [B.id]);
+B.enemies.forEach((e) => (e.hp = 300));
 ok('command menu has 攻撃/スキル/アイテム/防御/逃走', (await p.$$eval('#b-cmd button', (x) => x.map((e) => e.textContent).join(','))).match(/攻撃.*スキル.*アイテム.*防御.*逃走/));
 // turn 1: attack (choose target if several)
 const clickCmd = async (label) => { await p.click(`#b-cmd button:has-text("${label}")`); };
@@ -48,7 +51,7 @@ const pickFirstTarget = async () => { if (await p.$('#b-cmd button[data-t]')) aw
 await clickCmd('攻撃'); await pickFirstTarget();
 await p.waitForFunction((t) => window.__astral.scene.getScene('Battle').b.turn > t && !window.__astral.scene.getScene('Battle').busy, B.turn, { timeout: 15000 });
 let B2 = await bs();
-ok('attack resolved on server: enemy HP dropped, turn advanced', B2.turn === 2 && (B2.enemies.some((e, i) => e.hp < B.enemies[i].hp) || B2.status !== 'active'));
+ok('attack resolved on server: enemy HP dropped, turn advanced', B2.turn === 2 && (B2.enemies.some((e, i) => e.hp < B.enemies[i].hp) || B2.status !== 'active'), JSON.stringify(B2));
 const logTxt = await p.textContent('#b-log'); ok('battle log shows damage text', /ダメージ|たおした/.test(logTxt), logTxt.slice(0, 80));
 await p.screenshot({ path: SHOT + 'phase3-battle.png' });
 // item: やくそう (starter x3) -> inventory decremented in DB
@@ -62,7 +65,7 @@ if (B2.status === 'active') {
 // disconnect: reload page mid-battle -> resume same battle from server state
 B = await bs();
 await p.reload(); await p.waitForSelector('.play', { timeout: 15000 }); await p.click('.play');
-await p.waitForFunction(() => window.__astral?.scene.isActive('Battle'), null, { timeout: 10000 }).catch(async (e) => { console.log('DBG', errors, await p.evaluate(() => [window.__astral?.scene.getScenes(true).map((s) => s.scene.key)])); await p.screenshot({ path: '/tmp/dbg.png' }); throw e; }); await p.waitForSelector('#b-cmd button'); await p.waitForTimeout(500);
+await p.waitForFunction(() => window.__astral?.scene.isActive('Battle'), null, { timeout: 10000 }); await p.waitForSelector('#b-cmd button'); await p.waitForTimeout(500);
 let R = await bs();
 ok('reload mid-battle resumes same battle/turn/HP', R.id === B.id && R.turn === B.turn && JSON.stringify(R.enemies) === JSON.stringify(B.enemies), `turn ${R.turn}`);
 ok('resume notice in log', /再開/.test(await p.textContent('#b-log')));

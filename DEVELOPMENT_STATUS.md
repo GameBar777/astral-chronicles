@@ -45,3 +45,12 @@
 - テスト: shared 54 / server 39（phase4 13件含む）合格、E2E phase2 19/19・phase3 20/20・phase4 16/16 合格
 - スクショ: docs/screenshots/phase4-{inventory,walk,gather,smith,enhance}.png
 - 未実装: PHASE 5（クエスト/NPC会話/ショップ/宿屋）、NPC専用画像の配置、Colyseus側の位置同期（REST PUTのみ）、移動の連続衝突判定（更新単位チェックのみ）
+
+## PHASE 5 NPC・会話・ショップ・宿屋・クエスト（2026-10-31）— 完了（テスト通過）
+- NPC 7体配置（道具屋ミラ/宿屋ハナ/村長ブラム/鍛冶ゴルド/衛兵レオン 他）、npc_*単体画像描画。E で会話ウィンドウ（台詞送り＋サービス選択）
+- ショップ購入/売却（価格はDBのみ、距離・所持金・装備中/クエスト品売却不可、requestId冪等）
+- 宿屋（10G×Lv、HP/MP全回復、満タン時は拒否・課金なし）
+- クエスト: 討伐(q_hunt_slime)/採集(q_gather_herb)/納品(q_deliver_letter→ゴルド)/デイリー(q_daily_hunt, JST0時リセット)。L キーでクエスト一覧
+- 報酬二重受取防止: 行ロック下の状態遷移＋transactions一意キー `quest:<id>:<n>`。並列報告テスト済
+- テスト: shared 54 / server 48 全通過、E2E phase5 16/16（phase2 19/19, phase4 16/16 回帰OK）
+- 制約: E2E の討伐・採集進捗はDBで付与（実戦闘でのキル計上はサーバーテストで検証）

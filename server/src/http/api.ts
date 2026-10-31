@@ -6,6 +6,8 @@ import { act, activeBattle, listInventory, startBattle } from '../services/battl
 import { listItems, equip, unequip, useItem } from '../services/inventory.js';
 import { updatePosition, usePortal, gather, gatherState } from '../services/world.js';
 import { listRecipes, startCraft, claimCraft, activeJob, enhance, enhanceInfo } from '../services/crafting.js';
+import { listQuests, acceptQuest, turnInQuest } from '../services/quests.js';
+import { shopList, buy, sell, rest } from '../services/npc.js';
 import { rateLimit } from './rateLimit.js';
 type Authed = Request & { auth: { sessionId: string; userId: string; role: string } };
 const wrap = (fn: (req: any, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
@@ -51,6 +53,14 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/characters/:id/craft', auth, actRl, wrap(async (req: Authed, res) => res.status(201).json(await startCraft(U(req), P(req), B(req).recipeId, B(req).requestId))));
   r.post('/characters/:id/craft/:jobId/claim', auth, actRl, wrap(async (req: Authed, res) => res.json(await claimCraft(U(req), P(req), String(req.params.jobId)))));
   r.post('/characters/:id/enhance', auth, actRl, wrap(async (req: Authed, res) => res.json(await enhance(U(req), P(req), B(req).inventoryId, B(req).requestId))));
+  // PHASE 5: shop / inn / quests (requestId-idempotent; quest rewards double-guarded)
+  r.get('/shops/:npcId', wrap(async (req, res) => res.json(await shopList(String(req.params.npcId)))));
+  r.post('/characters/:id/shop/buy', auth, actRl, wrap(async (req: Authed, res) => res.json(await buy(U(req), P(req), B(req)))));
+  r.post('/characters/:id/shop/sell', auth, actRl, wrap(async (req: Authed, res) => res.json(await sell(U(req), P(req), B(req)))));
+  r.post('/characters/:id/inn', auth, actRl, wrap(async (req: Authed, res) => res.json(await rest(U(req), P(req), B(req).requestId))));
+  r.get('/characters/:id/quests', auth, wrap(async (req: Authed, res) => res.json(await listQuests(U(req), P(req)))));
+  r.post('/characters/:id/quests/:questId/accept', auth, actRl, wrap(async (req: Authed, res) => res.json(await acceptQuest(U(req), P(req), String(req.params.questId), B(req).requestId))));
+  r.post('/characters/:id/quests/:questId/complete', auth, actRl, wrap(async (req: Authed, res) => res.json(await turnInQuest(U(req), P(req), String(req.params.questId), B(req).requestId))));
   r.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof HttpError) return void res.status(err.status).json({ error: err.code });
     if (err?.type === 'entity.parse.failed') return void res.status(400).json({ error: 'invalid_json' });

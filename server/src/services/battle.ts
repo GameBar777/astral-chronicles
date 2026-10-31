@@ -4,6 +4,7 @@ import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
 import { addItem as addInv, equipmentBonus } from './inventory.js';
 import { MAPS, TOWN } from '../world/maps.js';
+import { recordKills } from './quests.js';
 export const ZONES = ['green_meadow'];
 export const MAX_ENEMIES = 5;
 const STALE_MS = 30 * 60_000; // an untouched active battle older than this is aborted (no rewards) when a new one is requested
@@ -123,15 +124,8 @@ export async function commitRewards(c: pg.PoolClient, battleId: string, ch: any,
     ON CONFLICT (character_id,idempotency_key) DO NOTHING RETURNING id`, [ch.id, rw.gold, JSON.stringify([...rw.drops, { exp: rw.exp }]), `battle:${battleId}`, battleId]);
   if (!ins.rowCount) return { rewards: null, levelUp: null };
   for (const d of rw.drops) await addItem(c, ch.id, d.itemId, d.qty);
-  const lv = applyExp(ch.level, Number(ch.exp), rw.exp);
-  await c.query('UPDATE characters SET gold=gold+$2, level=$3, exp=$4, updated_at=now() WHERE id=$1', [ch.id, rw.gold, lv.level, lv.exp]);
-  let levelUp = null;
-  if (lv.levelsGained > 0) {
-    const b = statsAt(ch.class, ch.level), a = statsAt(ch.class, lv.level);
-    await c.query(`UPDATE character_stats SET max_hp=$2,hp=$2,max_mp=$3,mp=$3,str=$4,vit=$5,"int"=$6,agi=$7,luk=$8,atk=$9,def=$10,matk=$11,mdef=$12 WHERE character_id=$1`,
-      [ch.id, a.maxHp, a.maxMp, a.str, a.vit, a.int, a.agi, a.luk, a.atk, a.def, a.matk, a.mdef]);
-    levelUp = { from: ch.level, to: lv.level, statDiff: Object.fromEntries(Object.keys(a).map((k) => [k, (a as any)[k] - (b as any)[k]]).filter(([, v]) => v !== 0)) };
-  }
+  const levelUp = await grantGoldExp(c, ch, rw.gold, rw.exp);
+  await recordKills(c, ch.id, st.combatants.filter((x) => x.side === 'enemy' && x.monsterId).map((x) => x.monsterId as string));
   const names = (await c.query('SELECT id,name FROM item_definitions WHERE id = ANY($1)', [rw.drops.map((d) => d.itemId)])).rows;
   return { rewards: { ...rw, drops: rw.drops.map((d) => ({ ...d, name: names.find((n) => n.id === d.itemId)?.name ?? d.itemId })) }, levelUp };
 }
@@ -141,3 +135,14 @@ export async function listInventory(userId: string, characterId: string) {
       WHERE i.character_id=$1 GROUP BY i.item_id, d.name, d.category ORDER BY i.item_id`, [characterId])).rows; });
 }
 export { BATTLE_ITEMS };
+
+/** Adds gold+EXP and applies level-ups (stats refilled). Shared by battle and quest rewards. */
+export async function grantGoldExp(c: pg.PoolClient, ch: any, gold: number, exp: number) {
+  const lv = applyExp(ch.level, Number(ch.exp), exp);
+  await c.query('UPDATE characters SET gold=gold+$2, level=$3, exp=$4, updated_at=now() WHERE id=$1', [ch.id, gold, lv.level, lv.exp]);
+  if (lv.levelsGained <= 0) return null;
+  const b = statsAt(ch.class, ch.level), a = statsAt(ch.class, lv.level);
+  await c.query(`UPDATE character_stats SET max_hp=$2,hp=$2,max_mp=$3,mp=$3,str=$4,vit=$5,"int"=$6,agi=$7,luk=$8,atk=$9,def=$10,matk=$11,mdef=$12 WHERE character_id=$1`,
+    [ch.id, a.maxHp, a.maxMp, a.str, a.vit, a.int, a.agi, a.luk, a.atk, a.def, a.matk, a.mdef]);
+  return { from: ch.level, to: lv.level, statDiff: Object.fromEntries(Object.keys(a).map((k) => [k, (a as any)[k] - (b as any)[k]]).filter(([, v]) => v !== 0)) };
+}

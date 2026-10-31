@@ -3,7 +3,7 @@ import { BattleError, ItemError } from '@astral/shared';
 import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CONFLICT = new Set(['inventory_full', 'not_enough_gold', 'not_enough_materials', 'node_not_ready', 'craft_busy', 'not_ready', 'already_claimed', 'in_battle', 'equipped', 'max_enhance', 'two_handed']);
+const CONFLICT = new Set(['inventory_full', 'not_enough_gold', 'not_enough_materials', 'node_not_ready', 'craft_busy', 'not_ready', 'already_claimed', 'in_battle', 'equipped', 'max_enhance', 'two_handed', 'already_full', 'already_rewarded', 'quest_active', 'quest_done', 'quest_incomplete', 'quest_not_active', 'cannot_sell']);
 export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>, db: pg.Pool = pool) {
   const c = await db.connect();
   try { await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r; }

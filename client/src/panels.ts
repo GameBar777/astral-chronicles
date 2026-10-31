@@ -11,16 +11,18 @@ const stat = (e: any) => ['atk', 'def', 'matk', 'mdef'].filter((k) => e?.[k]).ma
 const ERR: Record<string, string> = { level_too_low: 'レベルが足りません', class_cannot_equip: 'この職業では装備できません', not_equipment: '装備品ではありません', already_full: 'これ以上回復できません',
   not_usable: '今は使えません', inventory_full: '持ち物がいっぱいです', not_enough_gold: 'ゴールドが足りません', not_enough_materials: '素材が足りません', craft_busy: '製作中のものがあります',
   not_ready: 'まだ完成していません', already_claimed: '受け取り済みです', too_far: '離れすぎています', max_enhance: 'これ以上強化できません', two_handed: '両手剣を装備中は盾を装備できません',
-  node_not_ready: 'まだ採集できません', gather_level_too_low: '採集レベルが足りません', in_battle: '戦闘中です', not_at_portal: '出口の位置がずれています' };
+  node_not_ready: 'まだ採集できません', gather_level_too_low: '採集レベルが足りません', in_battle: '戦闘中です', not_at_portal: '出口の位置がずれています',
+  quest_active: '受注中です', quest_done: '受注できません（達成済み）', quest_incomplete: 'まだ条件を満たしていません', already_rewarded: '報酬は受け取り済みです', quest_not_active: '受注していません',
+  cannot_sell: 'それは売れません', equipped: '装備中は売れません', not_sold_here: 'ここでは売っていません', invalid_qty: '数量が不正です' };
 export const itemErr = (e: unknown) => { const t = errText(e); return ERR[t] ?? t; };
-function shell(title: string, cls = '') {
+export function shell(title: string, cls = '') {
   closePanel(); root = document.createElement('div'); root.id = 'p4'; root.className = `p4 ${cls}`;
   root.innerHTML = `<div class="p4-head"><span>${title}</span><button class="x" title="閉じる (I/Esc)">✕</button></div><div class="p4-body"></div><div class="p4-msg"></div>`;
   document.body.appendChild(root); root.querySelector<HTMLButtonElement>('.x')!.onclick = closePanel;
   const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { closePanel(); window.removeEventListener('keydown', onKey); } }; window.addEventListener('keydown', onKey);
   return { body: root.querySelector<HTMLDivElement>('.p4-body')!, msg: (t: string, ok = false) => { const m = root?.querySelector<HTMLDivElement>('.p4-msg'); if (m) { m.textContent = t; m.className = `p4-msg ${ok ? 'ok' : 'ng'}`; } } };
 }
-async function refreshChar(c: CharacterDto, onChar: (c: CharacterDto) => void) {
+export async function refreshChar(c: CharacterDto, onChar: (c: CharacterDto) => void) {
   const fresh = (await api<CharacterDto[]>('GET', '/characters').catch(() => [])).find((x) => x.id === c.id); if (fresh) onChar(fresh); return fresh ?? c;
 }
 export async function openInventory(c: CharacterDto, onChar: (c: CharacterDto) => void) {

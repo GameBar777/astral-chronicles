@@ -1,0 +1,22 @@
+html,body{margin:0;height:100%;background:#10121c;overflow:hidden;font-family:'DotGothic16',sans-serif;color:#f4ecd8}
+#game{position:absolute;inset:0}
+#ui{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.panel{pointer-events:auto;background:#1c2238ee;border:3px solid #c9a55a;box-shadow:0 0 0 3px #3a2a14,0 8px 30px #000a;padding:20px 24px;width:min(420px,92vw);max-height:92vh;overflow:auto;box-sizing:border-box}
+.panel h1{margin:0 0 4px;font-size:26px;color:#ffd77a;text-align:center;letter-spacing:2px}
+.panel h2{margin:12px 0 8px;font-size:17px;color:#ffd77a}
+.sub{text-align:center;font-size:13px;color:#b8b0a0;margin-bottom:14px}
+label{display:block;font-size:14px;margin:8px 0 3px}
+input,select,button{font-family:inherit;font-size:15px}
+input,select{width:100%;box-sizing:border-box;padding:7px;background:#0e1222;color:#fff;border:2px solid #56608a}
+button{cursor:pointer;padding:8px 14px;background:#3a4a8a;color:#fff;border:2px solid #c9a55a;margin-top:12px}
+button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
+.row{display:flex;gap:8px;flex-wrap:wrap} .row>*{flex:1}
+.err{color:#ff8a7a;min-height:1.3em;font-size:14px;margin-top:8px}
+.classes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.classes label{margin:0;border:2px solid #3a4266;padding:6px;cursor:pointer;font-size:13px}
+.classes input{width:auto;margin-right:4px} .classes label.sel{border-color:#ffd77a;background:#2a3256}
+.role{display:block;font-size:11px;color:#b8b0a0}
+.char{border:2px solid #3a4266;padding:8px;margin:6px 0;display:flex;justify-content:space-between;align-items:center}
+.char button{margin:0}
+#hudbar{position:absolute;top:8px;right:8px;pointer-events:auto}
+#hudbar button{margin:0;font-size:13px;padding:5px 10px}

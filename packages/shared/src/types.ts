@@ -9,5 +9,8 @@ export interface MapData {
   recommendedLevel: [number, number];
   layers: { name: string; data: number[] }[];
   spawn: Vec2;
-  objects: { id: string; type: 'npc' | 'portal' | 'gather' | 'chest' | 'deco'; x: number; y: number; props?: Record<string, unknown> }[];
+  projection?: 'orthogonal' | 'oblique_3_4';
+  /** x,y = footprint bottom-center (pixel). Depth (Y-sort) uses y. tx/ty/fw/fh = footprint in tiles (collision). */
+  objects: { id: string; type: 'npc' | 'portal' | 'gather' | 'chest' | 'deco'; kind?: string; x: number; y: number;
+    tx?: number; ty?: number; fw?: number; fh?: number; label?: string; props?: Record<string, unknown> }[];
 }

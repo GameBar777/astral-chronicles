@@ -27,7 +27,7 @@ npm run dev:client          # Vite :5173
 ```bash
 npm test                         # shared(ユニット) + server(DBスキーマ, 起動)
 npm run build                    # 全パッケージ型チェック+ビルド
-node client/e2e/phase1.mjs       # PHASE1ブラウザE2E（dev:client起動中に実行）
+node client/e2e/phase2.mjs       # ブラウザE2E（dev:server + dev:client起動中、19項目）
 ```
 
 ## 環境変数
@@ -38,3 +38,7 @@ node client/e2e/phase1.mjs       # PHASE1ブラウザE2E（dev:client起動中�
 
 ## デプロイ
 未整備（PHASE 10）。本番環境の分離、TLS(wss)終端、Dockerfile は未作成。
+
+## API（PHASE 2）
+`GET /api/classes` `GET /api/exp-table` `POST /api/auth/register|login` `POST /api/auth/logout`※ `GET /api/me`※ `GET|POST /api/characters`※（※ `Authorization: Bearer <token>`）
+テストはDB `astral_test` を毎回作り直す（`npm test`）。開発時は Vite が `/api` を `localhost:2567` にプロキシ。

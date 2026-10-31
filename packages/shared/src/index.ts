@@ -1,3 +1,6 @@
 export * from './types.js';
 export * from './movement.js';
 export * from './collision.js';
+export * from './classes.js';
+export * from './leveling.js';
+export * from './validation.js';

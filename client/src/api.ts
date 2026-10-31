@@ -1,0 +1,23 @@
+const KEY = 'astral.token';
+export const session = { get token() { return sessionStorage.getItem(KEY); }, set(t: string | null) { t ? sessionStorage.setItem(KEY, t) : sessionStorage.removeItem(KEY); } };
+export class ApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
+export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  const r = await fetch('/api' + path, { method, headers: { 'content-type': 'application/json', ...(session.token ? { authorization: `Bearer ${session.token}` } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body) });
+  if (r.status === 204) return null as T;
+  const j = await r.json().catch(() => ({ error: 'network' }));
+  if (!r.ok) throw new ApiError(r.status, j.error ?? 'unknown');
+  return j;
+}
+export const ERR_JA: Record<string, string> = {
+  invalid_email: 'メールアドレスの形式が正しくありません', invalid_password: 'パスワードは8〜72バイトで入力してください', email_taken: 'このメールアドレスは登録済みです',
+  invalid_credentials: 'メールアドレスまたはパスワードが違います', banned: 'このアカウントは利用停止中です', rate_limited: '操作が多すぎます。しばらく待ってください',
+  unauthorized: 'ログインし直してください', name_too_short: '名前は2文字以上にしてください', name_too_long: '名前は12文字以内にしてください',
+  name_invalid_chars: '使用できない文字が含まれています（ひらがな・カタカナ・漢字・英数字のみ）', name_digits_only: '数字のみの名前は使えません',
+  name_banned: '使用できない語句が含まれています', name_taken: 'その名前は既に使われています', character_limit: 'キャラクターは3体までです',
+  invalid_class: '職業を選んでください', invalid_appearance: '外見の指定が不正です', internal: 'サーバーエラーが発生しました', network: '通信エラーが発生しました',
+};
+export const errText = (e: unknown) => (e instanceof ApiError ? ERR_JA[e.code] ?? e.code : ERR_JA.network);
+export interface CharacterDto { id: string; name: string; class: string; appearance: { bodyType: 'a' | 'b'; hairStyle: number; hairColor: number; skinColor: number };
+  level: number; exp: number; gold: number; map_id: string; pos_x: number; pos_y: number; hp: number; max_hp: number; mp: number; max_mp: number;
+  str: number; vit: number; int: number; agi: number; luk: number; atk: number; def: number; matk: number; mdef: number; }

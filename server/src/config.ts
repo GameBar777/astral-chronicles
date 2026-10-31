@@ -5,4 +5,5 @@ function req(k: string): string { const v = process.env[k]; if (!v) throw new Er
 export const config = {
   databaseUrl: req('DATABASE_URL'),
   port: Number(process.env.SERVER_PORT ?? 2567),
+  bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 12),
 };

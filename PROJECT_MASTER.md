@@ -12,3 +12,4 @@
 - 経済: ゴールド、NPCショップ、将来プレイヤー市場 / ギルド
 - DB: PostgreSQL（SECTION 19 の25テーブル）/ セキュリティ: SECTION 20
 - 初期リリース完成条件: SECTION 24 / テスト25項目: SECTION 25 / 工程 PHASE 0〜10: SECTION 26
+- 確定事項（ユーザー決定 2026-10-31）: 描画=疑似アイソメ3/4見下ろし（TD-005）、認証=自前bcrypt+DBセッション（TD-003、Supabase不採用）

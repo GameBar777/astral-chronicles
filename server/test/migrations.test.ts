@@ -1,6 +1,9 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
+import { resetDb } from './setup-db.js';
+import { beforeAll } from 'vitest';
+beforeAll(resetDb);
 const REQUIRED = ['users','characters','character_stats','character_equipment','inventory','item_definitions','equipment_definitions',
   'monster_definitions','monster_drops','quests','character_quests','skills','character_skills','recipes','gathering_nodes','parties',
   'party_members','friends','guilds','guild_members','chat_messages','dungeon_instances','battle_logs','transactions','enhancement_logs'];

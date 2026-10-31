@@ -105,7 +105,7 @@ describe('PHASE 5 quests', () => {
     expect((await call('POST', `/characters/${CH}/quests/q_hunt_slime/accept`, { requestId: rid() })).body.error).toBe('quest_done');
   });
   it('gather: collect items consumed on turn-in', async () => {
-    await at('npc_shop_mira');
+    await at('npc_shop_mira'); await pool.query(`DELETE FROM inventory WHERE character_id=$1 AND item_id='herb'`, [CH]); // battles may have dropped herbs
     await call('POST', `/characters/${CH}/quests/q_gather_herb/accept`, { requestId: rid() });
     await give('herb', 2);
     expect((await call('POST', `/characters/${CH}/quests/q_gather_herb/complete`, { requestId: rid() })).body.error).toBe('quest_incomplete');

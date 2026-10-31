@@ -21,7 +21,7 @@ const eqRow = async (item) => (await db.query('SELECT count(*)::int n FROM chara
 await p.evaluate(() => { window.__astral.scene.getScene('World').cooldownUntil = 1e12; });
 
 
-const NPC = { mira: [352, 736], hana: [1008, 825.6], bram: [688, 435.2], gord: [976, 339.2], leon: [582.4, 620.8] };
+const NPC = { mira: [352, 736], hana: [1008, 825.6], bram: [720, 332.8], gord: [976, 339.2], leon: [582.4, 620.8] };
 const talk = async (k) => { await tp(NPC[k][0], NPC[k][1] + 36); await p.waitForTimeout(350); await p.keyboard.press('e'); await p.waitForSelector('#p4.dlg'); };
 const advance = async () => { while (await p.$('#p4 [data-o="next"]')) { await p.click('#p4 [data-o="next"]'); await p.waitForTimeout(80); } };
 const gold = async () => Number((await db.query('SELECT gold FROM characters WHERE id=$1', [charId])).rows[0].gold);

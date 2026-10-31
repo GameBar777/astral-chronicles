@@ -6,6 +6,8 @@ import { api, errText, session, type CharacterDto } from '../api';
 import type { BattleView } from './BattleScene';
 import { openInventory, closePanel, panelOpen, newRequestId } from '../panels';
 import { openDialog, openQuests } from '../npcpanels';
+import { Presence } from '../net';
+const FACE4: Record<Direction, string> = { s: 'down', n: 'up', w: 'left', nw: 'left', sw: 'left', e: 'right', ne: 'right', se: 'right' };
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
 interface Symbol { s: Phaser.GameObjects.Image; sh: Phaser.GameObjects.Ellipse; id: string; pos: Vec2; v: Vec2; t: number }
@@ -27,6 +29,12 @@ export class WorldScene extends Phaser.Scene {
   lastSent = { x: 0, y: 0 }; syncT = 0; syncing = false; portalBusy = false; prompt!: Phaser.GameObjects.Text; nodes: { id: string; x: number; y: number; img: Phaser.GameObjects.Image; type: string }[] = [];
   keyE!: Phaser.Input.Keyboard.Key; keyI!: Phaser.Input.Keyboard.Key;
   battleZone?: string; symbols: Symbol[] = []; inBattle = false; cooldownUntil = 0; spawnRect?: { x: number; y: number; w: number; h: number; monsters: string[]; zone: string };
+  netMoving = false; presence?: Presence; netText!: Phaser.GameObjects.Text;
+  /** BUG-014: the main camera is zoomed 1.5x, so scrollFactor(0) HUD objects are scaled about the screen centre. Map a screen px to that space. */
+  hud<T extends Phaser.GameObjects.Text>(o: T, sx: number, sy: number): T {
+    const z = this.cameras.main.zoom, cx = this.scale.width / 2, cy = this.scale.height / 2;
+    return o.setScale(1 / z).setPosition(cx + (sx - cx) / z, cy + (sy - cy) / z);
+  }
   constructor() { super('World'); }
   create(data: { character: CharacterDto }) {
     this.character = data.character;
@@ -59,6 +67,14 @@ export class WorldScene extends Phaser.Scene {
     this.player = this.add.sprite(this.pos.x, this.pos.y, `ch_${c.class}`, 0).setOrigin(0.5, 1);
     this.nameTag = this.add.text(0, 0, c.name, { fontFamily: FONT, fontSize: '12px', color: '#fff', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(1e6);
     this.cameras.main.setBounds(0, 0, this.map.width * 32, this.map.height * 32).startFollow(this.player, true, 0.15, 0.15).setRoundPixels(true).setZoom(1.5); // close 3/4 framing like the art target
+    // PHASE 6: shared map room (other players + server-validated movement)
+    this.netText = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#cfe8ff', backgroundColor: '#0c1020cc', padding: { x: 6, y: 2 } }).setScrollFactor(0).setDepth(1e7);
+    const placeNet = () => this.hud(this.netText, this.scale.width - this.netText.width - 110, 12);
+    const label: Record<string, string> = { connecting: '接続中…', online: 'オンライン', reconnecting: '再接続中…', offline: 'オフライン' };
+    this.presence = new Presence(this, c.id, this.map.id, (pos) => { this.pos = { x: pos.x, y: pos.y }; this.lastSent = { ...this.pos }; },
+      (st) => { this.netText.setText(`● ${label[st] ?? st}`).setColor(st === 'online' ? '#9af0a0' : '#ffd27a'); placeNet(); });
+    this.presence.connect();
+    this.events.once('shutdown', () => { this.presence?.close(); this.presence = undefined; });
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
     this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
@@ -67,7 +83,7 @@ export class WorldScene extends Phaser.Scene {
     this.events.once('shutdown', () => { closePanel(); this.keyE.removeAllListeners(); this.keyI.removeAllListeners(); });
     this.prompt = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#fff4cc', backgroundColor: '#3a2a14ee', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6 + 1).setVisible(false);
     const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  I:持ち物`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
-    const place = () => info.setPosition(Math.round(this.scale.width / 2 - info.width / 2), this.scale.height - info.height - 8);
+    const place = () => this.hud(info, Math.round(this.scale.width / 2 - info.width / 2), this.scale.height - info.height - 8);
     place(); this.scale.on('resize', place);
     this.events.once('shutdown', () => this.scale.off('resize', place));
     const sp = this.map.objects.find((o) => o.type === 'spawn');
@@ -126,7 +142,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.spawnRect && this.symbols.length < 7) this.time.delayedCall(4000, () => this.scene.isActive() && this.spawnSymbol());
   }
   toast(msg: string, bg = '#a02020dd') {
-    const t = this.add.text(this.scale.width / 2, 80, msg, { fontFamily: FONT, fontSize: '14px', color: '#fff', backgroundColor: bg, padding: { x: 8, y: 4 } }).setOrigin(0.5).setScrollFactor(0).setDepth(1e7);
+    const t = this.add.text(0, 0, msg, { fontFamily: FONT, fontSize: '14px', color: '#fff', backgroundColor: bg, padding: { x: 8, y: 4 } }).setOrigin(0.5).setScrollFactor(0).setDepth(1e7); this.hud(t, this.scale.width / 2, 80);
     this.time.delayedCall(2500, () => t.destroy());
   }
   checkPortal() {
@@ -153,7 +169,9 @@ export class WorldScene extends Phaser.Scene {
   async syncPosition(force = false) {
     if (this.syncing && !force) return;
     if (!force && Math.hypot(this.pos.x - this.lastSent.x, this.pos.y - this.lastSent.y) < 2) return;
-    this.syncing = true; const sent = { x: Math.round(this.pos.x), y: Math.round(this.pos.y) };
+    const sent = { x: Math.round(this.pos.x), y: Math.round(this.pos.y) };
+    if (!force && this.presence?.sendMove(sent.x, sent.y, FACE4[this.facing], this.walkT > 0)) { this.lastSent = sent; this.character.pos_x = sent.x; this.character.pos_y = sent.y; return; }
+    this.syncing = true;
     try {
       const r = await fetch('/api' + `/characters/${this.character.id}/position`, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.token}` },
         body: JSON.stringify({ mapId: this.map.id, ...sent }) });
@@ -234,6 +252,7 @@ export class WorldScene extends Phaser.Scene {
   }
   update(_t: number, dtMs: number) {
     if (this.spawnRect) this.updateSymbols(dtMs);
+    this.presence?.update(dtMs);
     if (this.inBattle) return;
     if (panelOpen()) { this.player.setFrame(SHEET_FRAME[this.facing]); this.prompt.setVisible(false); return; }
     const k = this.keys;
@@ -247,7 +266,10 @@ export class WorldScene extends Phaser.Scene {
     this.player.setPosition(Math.round(this.pos.x), Math.round(this.pos.y)).setFrame(frame).setDepth(this.pos.y); // Y-sort by feet
     this.nameTag.setPosition(Math.round(this.pos.x), Math.round(this.pos.y) - 62).setDepth(this.pos.y + 0.2); // BUG-006: tag Y-sorted with its owner
     this.syncT += dtMs;
-    if (this.syncT >= POS_SYNC_MS || (!dir && this.syncT > 120)) { this.syncT = 0; this.syncPosition(); }
+    const online = this.presence?.status === 'online', every = online ? 120 : POS_SYNC_MS; // room: ~8 Hz, HTTP fallback: 2.5 Hz
+    if (this.syncT >= every || (!dir && this.syncT > 120)) { this.syncT = 0; this.syncPosition(); }
+    if (online && !dir && this.netMoving) { this.netMoving = false; this.presence!.sendMove(Math.round(this.pos.x), Math.round(this.pos.y), FACE4[this.facing], false); }
+    if (dir) this.netMoving = true;
     const t = this.nearest();
     // BUG-0xx fix: the targeted node is tinted and drawn above the player so a tall sprite cannot hide it
     for (const n of this.nodes) { if (t?.kind === 'node' && t.node === n) n.img.setTint(0xfff3a0).setDepth(Math.max(n.y, this.pos.y + 0.1)); else n.img.clearTint().setDepth(n.y); }

@@ -4,6 +4,7 @@ import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { pool } from './db/pool.js';
 import { apiRouter } from './http/api.js';
+import { WorldRoom } from './rooms/WorldRoom.js';
 
 export function createGameServer(opts: { authLimit?: number; createLimit?: number; battleLimit?: number } = {}) {
   const app = express();
@@ -15,6 +16,6 @@ export function createGameServer(opts: { authLimit?: number; createLimit?: numbe
   });
   const http = createServer(app);
   const gameServer = new Server({ transport: new WebSocketTransport({ server: http }) });
-  // Rooms (WorldRoom etc.) are added in PHASE 6. Not implemented yet.
+  gameServer.define('world', WorldRoom).filterBy(['mapId']); // one shared room per map
   return { app, http, gameServer };
 }

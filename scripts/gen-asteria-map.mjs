@@ -49,7 +49,7 @@ objects.push({ id: 'npc_guild_receptionist', type: 'npc', x: 11.5 * 32, y: 10.6 
 // decorative townsfolk NPCs (static; no dialogue yet)
 [['npc_guard_leon', 18.2, 19.4, '衛兵 レオン', 'knight'], ['npc_traveler_aria', 26.5, 16.2, '旅人 アリア', 'mage'], ['npc_smith_gord', 30.5, 10.6, '鍛冶屋 ゴルド', 'npc_smith'],
  // PHASE 5 service NPCs (single-image sprites npc_*.png)
- ['npc_shop_mira', 11.0, 23.0, '道具屋 ミラ', 'npc_shop'], ['npc_inn_hana', 31.5, 25.8, '宿屋 ハナ', 'npc_inn'], ['npc_chief_bram', 21.5, 13.6, '村長 ブラム', 'npc_chief']]
+ ['npc_shop_mira', 11.0, 23.0, '道具屋 ミラ', 'npc_shop'], ['npc_inn_hana', 31.5, 25.8, '宿屋 ハナ', 'npc_inn'], ['npc_chief_bram', 22.5, 10.4, '村長 ブラム', 'npc_chief']]
   .forEach(([id, x, y, name, sheet]) => objects.push({ id, type: 'npc', x: x * 32, y: y * 32, props: { name, sheet } }));
 objects.push({ id: 'portal_to_meadow', type: 'portal', tx: W - 1, ty: 16, fw: 1, fh: 3, x: (W - 1) * 32, y: 17 * 32, props: { to: 'green_meadow', spawn: { x: 3.5 * 32, y: 17.6 * 32 } } });
 objects.push({ id: 'sign_to_meadow', type: 'deco', kind: 'sign', tx: W - 4, ty: 14, fw: 1, fh: 1, x: (W - 3.5) * 32, y: 15 * 32, label: 'みどりの草原 →' }); col[14 * W + W - 4] = 1;

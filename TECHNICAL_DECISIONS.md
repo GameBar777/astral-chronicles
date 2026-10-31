@@ -36,3 +36,9 @@
 - NPC定義（台詞/サービス）は @astral/shared npcs.ts、位置はマップJSON（サーバーが距離判定に使用、NPC_RANGE=80）
 - 品揃えは shop_items テーブル。クエスト進捗は character_quests.progress（`kill:<monster>`）を戦闘勝利コミット時にサーバーが加算
 - 報酬は status 遷移（active→rewarded, 行ロック）と transactions 一意キーの二重ガード。デイリーは rewarded_at を JST 日付で判定
+
+## TD-014 リアルタイム同期（PHASE 6）
+- Colyseus ルームはマップ単位（filterBy mapId）。ポータル等のマップ遷移は従来通り HTTP、シーン再生成時にルームを入れ替える
+- 位置の正はDB＋サーバー検証。ルームの move は1件処理中＋最新1件のみ保留（合体）でDB書込みを抑制。強制同期（会話・採集・ポータル前）は HTTP のまま
+- 接続先 `ws://<host>:2567`（VITE_GAME_WS で上書き）。Vite プロキシは /api のみ
+- 再接続猶予15秒。同キャラの新規参加時は猶予中の旧席を reject して削除（ゴースト防止）

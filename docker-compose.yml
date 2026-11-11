@@ -1,0 +1,17 @@
+# UNVERIFIED (no Docker on the dev box). Local/prod-like stack: PostgreSQL + game server. Put a TLS proxy (Caddy/nginx) in front for HTTPS/WSS.
+services:
+  db:
+    image: postgres:17
+    environment: { POSTGRES_USER: astral, POSTGRES_PASSWORD: "${DB_PASSWORD:?set DB_PASSWORD}", POSTGRES_DB: astral }
+    volumes: [ "pgdata:/var/lib/postgresql/data" ]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U astral"], interval: 5s, retries: 10 }
+  game:
+    build: .
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      DATABASE_URL: "postgres://astral:${DB_PASSWORD}@db:5432/astral"
+      NODE_ENV: production
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+    ports: [ "2567:2567" ]
+volumes: { pgdata: {} }

@@ -64,3 +64,17 @@
 - 手数料は出品時の率を fee_rate に保存（将来の率変更が既存出品に影響しない）。fee=max(1,floor(price×0.05))
 - 期限切れは購入時/一覧時に判定（スイープ不要）、出品者が「回収」で返却。返却/購入には空き枠が必要（inventory_full）
 - ランキングは集計クエリ＋プロセス内30秒キャッシュ（単一プロセス前提）
+## TD-018 サウンド（PHASE 10）
+- 外部音源ファイルを使わず、WebAudio でブラウザ内合成したオリジナル曲/効果音（`client/src/audio.ts`）。ライセンス問題なし・アセット0KB
+- BGM: title / town / meadow / battle / boss / dungeon / victory / defeat（forest は未使用マップ用に定義のみ）。効果音: 攻撃・魔法・被弾・回復・レベルアップ・アイテム・強化・メニュー
+- ブラウザの自動再生制限のため最初のクリック/キー入力で AudioContext を再開。音量（BGM/SE）とミュートは localStorage `astral.audio`
+- 制約: チップチューン風の簡易合成。実音質の確認は人の耳で未実施（E2E は選曲状態と設定保存のみ検証）
+## TD-019 運用・セキュリティ・デプロイ（PHASE 10）
+- migration 009: audit_logs / server_settings(maintenance) / announcements / chat_mutes / character_blocks
+- ロールは users.role（player/gm/admin）を毎リクエスト DB から解決。管理 API `/api/admin/*` はロール検査＋レート制限＋監査ログ。管理画面 UI は作らず API のみ
+- メンテナンス: 一般ユーザーの API(503)・ログイン・ルーム入室を拒否、スタッフは通過。値は2秒キャッシュ。切替時にオンライン全員へ system_notice
+- BAN: 全セッション失効＋接続中なら切断。補填付与は grantId で冪等（transactions 一意キー）
+- HTTP ヘッダ: CSP（script-src 'self'、connect-src 'self' ws: wss:）、nosniff、X-Frame-Options DENY、Referrer-Policy no-referrer、COOP、本番のみ HSTS、/api は no-store。WS は maxPayload 16KB、ALLOWED_ORIGINS で Origin 検査、TRUST_PROXY 対応
+- 本番は1プロセスが client/dist を同一オリジン配信（クライアントは PROD ビルドで同一オリジンの WS に接続）。既定DBパスワードのままの本番起動は拒否
+- Dockerfile / docker-compose.yml は用意したが Docker が箱に無く**未検証**。本番ビルドの同一オリジン配信は `client/e2e/prod-smoke.mjs` で検証済
+- チャット: ウィスパー（/w 名前 本文、相手がオンライン＆未ブロック時のみ）、ブロック（双方向の申請拒否・発言非表示・フレンド解除）、ミュートは chat_mutes に永続化（スパム自動ミュート/GMミュート、再起動後も有効）

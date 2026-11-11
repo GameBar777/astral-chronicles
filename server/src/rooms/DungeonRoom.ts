@@ -35,9 +35,9 @@ export class DungeonRoom extends Room {
   setInBattle() { this.pingPresence(); }
   private async chat(client: Client, m: any) {
     const a = client.auth as Auth; if (!a) return;
-    const r = await postChat({ id: a.characterId, name: a.name }, `dungeon:${this.instanceId}`, m?.channel, m?.body).catch(() => ({ error: 'internal' } as any));
+    const r = await postChat({ id: a.characterId, name: a.name }, `dungeon:${this.instanceId}`, m?.channel, m?.body, m?.to).catch(() => ({ error: 'internal' } as any));
     if ('error' in r) return client.send('chat_error', { code: r.error, channel: m?.channel });
-    if (r.to) hub.send(r.to, 'chat', r.msg); else this.broadcast('chat', r.msg);
+    if (r.to) hub.send(r.to, 'chat', r.msg); else this.broadcast('chat', r.msg, { except: this.clients.filter((x) => r.exclude?.includes((x.auth as any)?.characterId)) });
   }
   async onLeave(client: Client, consented: boolean) {
     const a = client.auth as Auth;

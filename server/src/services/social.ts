@@ -14,6 +14,9 @@ const byName = async (c: pg.PoolClient, name: unknown) => {
   const r = await c.query('SELECT id,name FROM characters WHERE name=$1 AND deleted_at IS NULL', [name.trim()]);
   if (!r.rows[0]) throw new HttpError(404, 'target_not_found'); return r.rows[0] as { id: string; name: string };
 };
+/** `by` has blocked `who` → requests from `who` are refused (the reply does not reveal more than "blocked") */
+const notBlocked = async (c: pg.PoolClient | pg.Pool, by: string, who: string) => { if ((await c.query('SELECT 1 FROM character_blocks WHERE character_id=$1 AND blocked_character_id=$2', [by, who])).rowCount) throw new HttpError(409, 'blocked'); };
+export const blockersOf = async (id: string) => (await pool.query('SELECT character_id FROM character_blocks WHERE blocked_character_id=$1', [id])).rows.map((r) => r.character_id as string);
 const uuid = (v: unknown, code: string) => { if (typeof v !== 'string' || !UUID.test(v)) throw new HttpError(404, code); return v; };
 export const partyOf = async (c: pg.PoolClient | pg.Pool, characterId: string, lock = false) =>
   (await c.query(`SELECT p.id, p.leader_character_id leader FROM party_members m JOIN parties p ON p.id=m.party_id WHERE m.character_id=$1 AND p.disbanded_at IS NULL ${lock ? 'FOR UPDATE OF p' : ''}`, [characterId])).rows[0] as { id: string; leader: string } | undefined;
@@ -48,14 +51,16 @@ export async function socialView(userId: string, characterId: string) {
   const guild = g ? { ...g, members: (await c.query(`SELECT c.id,c.name,c.class,c.level,m.rank FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 ORDER BY array_position(ARRAY['leader','officer','member'], m.rank), c.name`, [g.id])).rows.map((r: any) => ({ ...mem(r), rank: r.rank })) } : null;
   const invites = (await c.query(`SELECT i.kind, i.scope_id, c.name "from" FROM social_invites i JOIN characters c ON c.id=i.invited_by WHERE i.character_id=$1 AND i.created_at > now() - interval '${INVITE_TTL_MIN} minutes' ORDER BY i.created_at`, [me.id])).rows
     .map((r) => ({ kind: r.kind, id: r.scope_id, from: r.from }));
-  return { me: me.id, friends: fr.filter((f) => f.status === 'accepted').map(mem), outgoing: fr.filter((f) => f.status === 'pending').map((f) => ({ id: f.id, name: f.name })), incoming, party, guild, invites };
+  const blocks = (await c.query('SELECT c.id,c.name FROM character_blocks b JOIN characters c ON c.id=b.blocked_character_id WHERE b.character_id=$1 ORDER BY c.name', [me.id])).rows;
+  const mute = (await c.query('SELECT until FROM chat_mutes WHERE character_id=$1 AND until > now()', [me.id])).rows[0]?.until ?? null;
+  return { blocks, mutedUntil: mute, me: me.id, friends: fr.filter((f) => f.status === 'accepted').map(mem), outgoing: fr.filter((f) => f.status === 'pending').map((f) => ({ id: f.id, name: f.name })), incoming, party, guild, invites };
 }
 
 /* ---------- friends ---------- */
 export async function friendRequest(userId: string, characterId: string, name: unknown) {
   let accepted = false; let target: { id: string; name: string }; let me: any;
   await tx(async (c) => {
-    me = await ownChar(c, userId, characterId, true); target = await byName(c, name);
+    me = await ownChar(c, userId, characterId, true); target = await byName(c, name); await notBlocked(c, target.id, me.id);
     if (target.id === me.id) throw new HttpError(400, 'self');
     const rev = (await c.query('SELECT status FROM friends WHERE character_id=$1 AND friend_character_id=$2', [target.id, me.id])).rows[0];
     if (rev?.status === 'blocked') throw new HttpError(404, 'target_not_found');
@@ -103,7 +108,7 @@ export async function partyCreate(userId: string, characterId: string) {
 export async function partyInvite(userId: string, characterId: string, name: unknown) {
   let me: any, target: any, partyId = '';
   await tx(async (c) => {
-    me = await ownChar(c, userId, characterId, true); target = await byName(c, name);
+    me = await ownChar(c, userId, characterId, true); target = await byName(c, name); await notBlocked(c, target.id, me.id);
     if (target.id === me.id) throw new HttpError(400, 'self');
     let p = await partyOf(c, me.id, true);
     if (!p) { // inviting without a party creates one with you as leader
@@ -190,7 +195,7 @@ export async function guildCreate(userId: string, characterId: string, name: unk
 }
 export async function guildInvite(userId: string, characterId: string, name: unknown) {
   let me: any, target: any;
-  await tx(async (c) => { me = await ownChar(c, userId, characterId, true); target = await byName(c, name); const g = await guildOf(c, me.id);
+  await tx(async (c) => { me = await ownChar(c, userId, characterId, true); target = await byName(c, name); await notBlocked(c, target.id, me.id); const g = await guildOf(c, me.id);
     if (!g) throw new HttpError(409, 'not_in_guild'); if (g.rank === 'member') throw new HttpError(403, 'not_officer');
     if (await guildOf(c, target.id)) throw new HttpError(409, 'target_in_guild');
     await c.query(`INSERT INTO social_invites(kind,scope_id,character_id,invited_by) VALUES('guild',$1,$2,$3) ON CONFLICT (kind,scope_id,character_id) DO UPDATE SET created_at=now(), invited_by=$3`, [g.id, target.id, me.id]); });
@@ -227,24 +232,40 @@ export function spamCheck(id: string, body: string, now = Date.now()): string | 
   if (s.last && s.last.body === body && now - s.last.at < DUP_MS) return strike('duplicate');
   s.times.push(now); s.last = { body, at: now }; return null;
 }
-export type ChatChannel = 'local' | 'party' | 'guild';
+export type ChatChannel = 'local' | 'party' | 'guild' | 'whisper';
+/** persistent mute (spam auto-mute or GM mute) — survives restarts (PHASE 10, migration 009) */
+async function mutedUntil(id: string) { const r = await pool.query('SELECT until FROM chat_mutes WHERE character_id=$1 AND until > now()', [id]); return r.rows[0]?.until as Date | undefined; }
+async function persistMute(id: string) { await pool.query(`INSERT INTO chat_mutes(character_id,until,reason) VALUES($1,now()+($2||' milliseconds')::interval,'spam') ON CONFLICT (character_id) DO UPDATE SET until=GREATEST(chat_mutes.until, EXCLUDED.until)`, [id, String(MUTE_MS)]); }
 /** resolves recipients + persists. Local scope = map id (room broadcast is done by the caller). */
-export async function postChat(sender: { id: string; name: string }, mapId: string, channel: unknown, raw: unknown) {
-  if (channel !== 'local' && channel !== 'party' && channel !== 'guild') return { error: channel === 'system' ? 'system_readonly' : 'invalid_channel' };
+export async function postChat(sender: { id: string; name: string }, mapId: string, channel: unknown, raw: unknown, whisperTo?: unknown): Promise<any> {
+  if (channel !== 'local' && channel !== 'party' && channel !== 'guild' && channel !== 'whisper') return { error: channel === 'system' ? 'system_readonly' : 'invalid_channel' };
   const body = sanitize(raw); if (!body) return { error: 'invalid_body' };
-  let scope = mapId, to: string[] | null = null;
+  if (await mutedUntil(sender.id)) return { error: 'muted' };
+  let scope = mapId, to: string[] | null = null, recipient: { id: string; name: string } | null = null;
+  if (channel === 'whisper') {
+    if (typeof whisperTo !== 'string' || !whisperTo.trim()) return { error: 'invalid_name' };
+    const t = (await pool.query('SELECT id,name FROM characters WHERE name=$1 AND deleted_at IS NULL', [whisperTo.trim()])).rows[0];
+    if (!t) return { error: 'target_not_found' }; if (t.id === sender.id) return { error: 'self' };
+    if ((await pool.query('SELECT 1 FROM character_blocks WHERE character_id=$1 AND blocked_character_id=$2', [t.id, sender.id])).rowCount) return { error: 'blocked' };
+    if (!hub.online(t.id)) return { error: 'target_offline' };
+    recipient = t; scope = t.id; to = [t.id, sender.id];
+  }
   if (channel === 'party') { const p = await partyOf(pool, sender.id); if (!p) return { error: 'not_in_party' }; scope = p.id; to = await partyMemberIds(pool, p.id); }
   if (channel === 'guild') { const g = await guildOf(pool, sender.id); if (!g) return { error: 'not_in_guild' }; scope = g.id; to = await guildMemberIds(pool, g.id); }
-  const e = spamCheck(sender.id, body); if (e) return { error: e };
-  const r = await pool.query(`INSERT INTO chat_messages(channel,scope_id,sender_character_id,body) VALUES($1,$2,$3,$4) RETURNING id,created_at`, [channel === 'local' ? 'say' : channel, scope, sender.id, body]);
-  return { msg: { id: Number(r.rows[0].id), channel, from: { id: sender.id, name: sender.name }, body, at: r.rows[0].created_at }, to };
+  const e = spamCheck(sender.id, body); if (e) { if (e === 'muted') await persistMute(sender.id); return { error: e }; }
+  const r = await pool.query(`INSERT INTO chat_messages(channel,scope_id,sender_character_id,recipient_character_id,body) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at`, [channel === 'local' ? 'say' : channel, scope, sender.id, recipient?.id ?? null, body]);
+  const blockers = await blockersOf(sender.id); // people who blocked the sender never receive the message
+  if (to) to = to.filter((x) => !blockers.includes(x));
+  return { msg: { id: Number(r.rows[0].id), channel, from: { id: sender.id, name: sender.name }, ...(recipient ? { to: recipient } : {}), body, at: r.rows[0].created_at }, to, exclude: blockers };
 }
 export async function chatHistory(characterId: string, mapId: string, limit = 30) {
   const p = await partyOf(pool, characterId), g = await guildOf(pool, characterId);
-  const r = await pool.query(`SELECT m.id, m.channel, m.body, m.created_at at, m.sender_character_id sid, c.name FROM chat_messages m LEFT JOIN characters c ON c.id=m.sender_character_id
-    WHERE (m.channel='say' AND m.scope_id=$1) OR (m.channel='party' AND m.scope_id=$2) OR (m.channel='guild' AND m.scope_id=$3) OR (m.channel='system' AND m.recipient_character_id=$4)
+  const r = await pool.query(`SELECT m.id, m.channel, m.body, m.created_at at, m.sender_character_id sid, c.name, CASE WHEN m.channel='whisper' THEN m.recipient_character_id END rid, rc.name rname FROM chat_messages m LEFT JOIN characters c ON c.id=m.sender_character_id LEFT JOIN characters rc ON rc.id=m.recipient_character_id AND m.channel='whisper'
+    WHERE ((m.channel='say' AND m.scope_id=$1) OR (m.channel='party' AND m.scope_id=$2) OR (m.channel='guild' AND m.scope_id=$3) OR (m.channel='system' AND m.recipient_character_id=$4)
+      OR (m.channel='whisper' AND (m.recipient_character_id=$4 OR m.sender_character_id=$4)))
+      AND NOT EXISTS (SELECT 1 FROM character_blocks b WHERE b.character_id=$4 AND b.blocked_character_id=m.sender_character_id)
     ORDER BY m.id DESC LIMIT $5`, [mapId, p?.id ?? '-', g?.id ?? '-', characterId, limit]);
-  return r.rows.reverse().map((x) => ({ id: Number(x.id), channel: x.channel === 'say' ? 'local' : x.channel, body: x.body, at: x.at, ...(x.sid ? { from: { id: x.sid, name: x.name } } : {}) }));
+  return r.rows.reverse().map((x) => ({ id: Number(x.id), channel: x.channel === 'say' ? 'local' : x.channel, body: x.body, at: x.at, ...(x.sid ? { from: { id: x.sid, name: x.name } } : {}), ...(x.rid ? { to: { id: x.rid, name: x.rname } } : {}) }));
 }
 export const friendsOf = (id: string) => friendIds(pool, id);
 
@@ -297,4 +318,18 @@ export async function guildDisband(userId: string, characterId: string, confirmN
     ids = await guildMemberIds(c, g.id); name = g.name;
     await c.query(`DELETE FROM social_invites WHERE kind='guild' AND scope_id=$1`, [g.id]); await c.query('DELETE FROM guilds WHERE id=$1', [g.id]); });
   refresh(ids); await systemMsg(ids, `ギルド「${name}」は解散しました`); return { ok: true };
+}
+
+/* ---------- block (PHASE 10 gap) ---------- */
+export async function blockAdd(userId: string, characterId: string, name: unknown) {
+  return tx(async (c) => { const me = await ownChar(c, userId, characterId, true); const t = await byName(c, name); if (t.id === me.id) throw new HttpError(400, 'self');
+    await c.query('INSERT INTO character_blocks(character_id,blocked_character_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [me.id, t.id]);
+    await c.query(`DELETE FROM friends WHERE (character_id=$1 AND friend_character_id=$2) OR (character_id=$2 AND friend_character_id=$1)`, [me.id, t.id]); // blocking ends a friendship
+    await c.query('DELETE FROM social_invites WHERE character_id=$1 AND invited_by=$2', [me.id, t.id]);
+    return { ok: true }; }).then((r) => { refresh([characterId]); return r; });
+}
+export async function blockRemove(userId: string, characterId: string, targetId: unknown) {
+  const t = uuid(targetId, 'member_not_found');
+  await tx(async (c) => { const me = await ownChar(c, userId, characterId); await c.query('DELETE FROM character_blocks WHERE character_id=$1 AND blocked_character_id=$2', [me.id, t]); });
+  refresh([characterId]); return { ok: true };
 }

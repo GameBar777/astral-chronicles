@@ -36,11 +36,13 @@ function render() {
   el.innerHTML = `<div class="p4-head">フレンド / パーティー / ギルド <button class="x" data-a="close">×</button></div><div class="p4-msg ${msgOk ? 'ok' : 'ng'}">${esc(msg)}</div><div class="p4-body">
     ${inv ? `<h4>招待</h4>${inv}` : ''}
     <h4>パーティー (${d.party ? d.party.members.length : 0}/4)</h4>${party}
-    <div class="s-inv"><input id="s-pname" maxlength="16" placeholder="キャラ名"/>${!d.party || lead ? '<button data-a="party/invite">パーティー招待</button>' : ''}${d.guild && d.guild.rank !== 'member' ? '<button data-a="guild/invite">ギルド招待</button>' : ''}<button data-a="friends/request">フレンド申請</button></div>
+    <div class="s-inv"><input id="s-pname" maxlength="16" placeholder="キャラ名"/>${!d.party || lead ? '<button data-a="party/invite">パーティー招待</button>' : ''}${d.guild && d.guild.rank !== 'member' ? '<button data-a="guild/invite">ギルド招待</button>' : ''}<button data-a="friends/request">フレンド申請</button><button data-a="block">ブロック</button></div>
     <h4>フレンド (${d.friends.length})</h4>${d.friends.map((f: any) => `<div class="s-row">${who(f)} <button data-a="friends/remove" data-id="${f.id}">削除</button></div>`).join('') || '<div class="s-none">なし</div>'}
     ${d.incoming.length ? `<h4>申請が届いています</h4>${d.incoming.map((f: any) => `<div class="s-row"><b>${esc(f.name)}</b> <button data-a="friends/accept" data-id="${f.id}">承認</button></div>`).join('')}` : ''}
     ${d.outgoing.length ? `<div class="s-none">申請中: ${d.outgoing.map((f: any) => esc(f.name)).join(', ')}</div>` : ''}
-    <h4>ギルド</h4>${guild}</div>`;
+    <h4>ギルド</h4>${guild}
+    <h4>ブロック中 (${(d.blocks ?? []).length})</h4>${(d.blocks ?? []).map((x: any) => `<div class="s-row"><b>${esc(x.name)}</b> <button data-a="unblock" data-id="${x.id}">解除</button></div>`).join('') || '<div class="s-none">なし</div>'}
+    ${d.mutedUntil ? `<div class="s-none ng">発言制限中（${new Date(d.mutedUntil).toLocaleTimeString('ja-JP')} まで）</div>` : ''}</div>`;
 }
 function onClick(e: Event) {
   const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null; if (!b || !el) return;
@@ -55,6 +57,7 @@ function onClick(e: Event) {
     'guild/accept': [{ guildId: id }, 'ギルドに参加しました'], 'guild/leave': [{}, 'ギルドを脱退しました'] };
   map['guild/rank'] = [{ characterId: id, rank: b.dataset.rank }, b.dataset.rank === 'officer' ? 'オフィサーに昇格しました' : 'メンバーに降格しました'];
   map['guild/kick'] = [{ characterId: id }, 'ギルドから追放しました'];
+  map['block'] = [{ name }, `${name} をブロックしました（チャット・申請が届かなくなります）`]; map['unblock'] = [{ characterId: id }, 'ブロックを解除しました'];
   if (a === 'guild/transfer') { confirmBox('ギルドマスターを譲渡しますか？<br><small>あなたはオフィサーになります</small>', '譲渡する').then((ok) => { if (ok) act(a, { characterId: id }, 'ギルドマスターを譲渡しました'); }); return; }
   if (a === 'guild/disband') { promptBox(`解散するにはギルド名「${esc(data?.guild?.name ?? '')}」を入力してください`, '解散する').then((n) => { if (n !== null) act(a, { confirmName: n }, 'ギルドを解散しました'); }); return; }
   if (map[a]) act(a, ...map[a]);

@@ -84,7 +84,7 @@ await tab(A, 'System'); ok('System tab input is disabled', await A.p.isDisabled(
 // --- Spam guard (C floods)
 await tab(C, 'Local');
 for (let i = 0; i < 9; i++) { await C.p.fill('#chat input', `連投${i}`); await C.p.press('#chat input', 'Enter'); }
-ok('flood → muted notice', await waitFor(async () => /一時的に発言できません/.test(await C.p.textContent('#chat .c-err'))));
+ok('flood → muted notice', await waitFor(async () => /発言が制限されています|一時的に発言できません/.test(await C.p.textContent('#chat .c-err'))));
 const fl = (await db.query(`SELECT count(*) FILTER (WHERE body LIKE '連投%')::int n, count(*) FILTER (WHERE created_at > now()-interval '10 seconds')::int w FROM chat_messages WHERE sender_character_id=$1`, [C.id])).rows[0];
 ok('flood capped: ≤5 msgs per 10s stored', fl.n < 9 && fl.w <= 5, JSON.stringify(fl));
 await shot(C, 'phase7-chat-spam.png');

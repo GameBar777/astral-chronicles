@@ -1,8 +1,10 @@
+import { lookTexture } from '../art/look';
 import Phaser from 'phaser';
 import { Client, type Room } from 'colyseus.js';
 import { api, errText, session, type CharacterDto } from '../api';
 import { wsEndpoint } from '../net';
 import { chatBus } from '../chat';
+import { playBgm } from '../audio';
 import { socialBus } from '../social';
 import type { BattleView } from './BattleScene';
 const FONT = '"DotGothic16", sans-serif';
@@ -21,7 +23,7 @@ export class DungeonScene extends Phaser.Scene {
   constructor() { super('Dungeon'); }
   init(data: { character: CharacterDto }) { this.c = data.character; this.d = null; this.closed = false; this.inBattle = false; this.leaving = false; }
   async create() {
-    this.cameras.main.setBackgroundColor('#07050c'); this.cameras.main.fadeIn(300);
+    this.cameras.main.setBackgroundColor('#07050c'); this.cameras.main.fadeIn(300); playBgm('dungeon');
     this.layer = this.add.container(0, 0);
     this.panel = document.createElement('div'); this.panel.id = 'dungeon'; document.getElementById('ui')!.appendChild(this.panel);
     this.events.once('shutdown', () => { this.closed = true; this.panel.remove(); this.room?.leave(true).catch?.(() => {}); this.room = undefined; if (chatBus.send) chatBus.send = null; this.scale.off('resize', this.onResize, this); });
@@ -43,8 +45,8 @@ export class DungeonScene extends Phaser.Scene {
     room.onMessage('battle', (v: BattleView) => this.onBattlePush(v));
     room.onMessage('battle_wait', (m: any) => (this.scene.get('Battle') as any)?.onWait?.(m));
     room.onMessage('chat', (m: any) => chatBus.onMsg(m)); room.onMessage('chat_history', (h: any) => chatBus.onHistory(h ?? []));
-    room.onMessage('chat_error', (m: any) => chatBus.onError(m?.code)); room.onMessage('social', () => socialBus.refresh());
-    chatBus.send = (channel, body) => { if (this.room !== room) return false; room.send('chat', { channel, body }); return true; };
+    room.onMessage('chat_error', (m: any) => chatBus.onError(m?.code)); room.onMessage('system_notice', (m: any) => chatBus.notice(m)); room.onMessage('social', () => socialBus.refresh());
+    chatBus.send = (channel, body, to) => { if (this.room !== room) return false; room.send('chat', { channel, body, ...(to ? { to } : {}) }); return true; };
     room.onLeave(async (code) => {
       if (this.room === room) chatBus.send = null;
       if (this.closed || code === 4001) { this.netStatus = 'offline'; this.renderPanel(); return; }
@@ -88,6 +90,7 @@ export class DungeonScene extends Phaser.Scene {
     this.scene.bringToTop('Battle'); this.scene.setVisible(false); // Dungeon is registered after Battle, so it would draw over it
   }
   async afterBattle(status: string) {
+    playBgm('dungeon');
     this.inBattle = false; this.scene.setVisible(true); this.scene.setVisible(true, 'Hud'); document.getElementById('chat')?.classList.remove('hidden');
     const fresh = (await api<CharacterDto[]>('GET', '/characters').catch(() => [])).find((x) => x.id === this.c.id);
     if (fresh) { this.c = fresh; this.game.events.emit('character', fresh); }
@@ -171,7 +174,7 @@ export class DungeonScene extends Phaser.Scene {
     const ms = d.members.filter((m) => !m.left);
     ms.forEach((m, i) => { const x = cx + 60 + (i - (ms.length - 1) / 2) * 70, y = y0 + rh - 24;
       this.layer.add(this.add.ellipse(x, y - 2, 40, 12, 0x000000, 0.4));
-      const s = this.add.sprite(x, y, `ch_${m.class}`, 3).setOrigin(0.5, 1).setScale(1.3).setAlpha(m.online ? 1 : 0.4); this.layer.add(s); // back view (facing the room)
+      const s = this.add.sprite(x, y, lookTexture(this, m.class, (m as any).look), 3).setOrigin(0.5, 1).setScale(1.3).setAlpha(m.online ? 1 : 0.4); this.layer.add(s); // back view (facing the room)
       t(x, y + 12, m.name + (m.online ? '' : '（切断中）'), 11, m.id === this.c.id ? '#ffe08a' : '#fff'); });
   }
 }

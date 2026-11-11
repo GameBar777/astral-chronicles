@@ -14,7 +14,7 @@ export const __setRng = (r: Rng) => { rng = r; }; // tests only
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ownChar = async (c: pg.PoolClient, userId: string, characterId: string, lock = false) => {
   if (!UUID.test(characterId)) throw new HttpError(404, 'character_not_found');
-  const r = await c.query(`SELECT c.id,c.name,c.class,c.level,c.exp,c.gold,c.map_id,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
+  const r = await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,c.exp,c.gold,c.map_id,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
     WHERE c.id=$1 AND c.user_id=$2 AND c.deleted_at IS NULL ${lock ? 'FOR UPDATE OF c' : ''}`, [characterId, userId]);
   if (!r.rows[0]) throw new HttpError(404, 'character_not_found');
   return r.rows[0];
@@ -115,7 +115,7 @@ export const act = (userId: string, battleId: string, turn: number, command: Com
 export async function playerCombatant(c: pg.PoolClient, ch: any, id: string): Promise<Combatant> {
   const eb = await equipmentBonus(c, ch.id);
   const skills = (await c.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id])).rows.map((r) => r.skill_id).filter((s) => SKILLS[s]);
-  return { id, side: 'player', characterId: ch.id, cls: ch.class, name: ch.name, level: ch.level, hp: ch.hp, maxHp: ch.max_hp, mp: ch.mp, maxMp: ch.max_mp,
+  return { id, side: 'player', characterId: ch.id, cls: ch.class, look: ch.appearance ?? undefined, name: ch.name, level: ch.level, hp: ch.hp, maxHp: ch.max_hp, mp: ch.mp, maxMp: ch.max_mp,
     atk: ch.atk + eb.atk, def: ch.def + eb.def, matk: ch.matk + eb.matk, mdef: ch.mdef + eb.mdef, agi: ch.agi, luk: ch.luk, element: 'none', statuses: [], defending: false, guardTurns: 0, skills };
 }
 export async function consumeItem(c: pg.PoolClient, characterId: string, itemId: string) {

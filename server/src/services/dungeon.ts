@@ -22,7 +22,7 @@ async function instanceOf(c: pg.PoolClient, characterId: string, lock = false) {
   return inst;
 }
 async function members(c: pg.PoolClient, instId: string) {
-  return (await c.query(`SELECT c.id,c.name,c.class,c.level,s.hp,s.max_hp,s.mp,s.max_mp,m.left_at FROM dungeon_members m JOIN characters c ON c.id=m.character_id
+  return (await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,s.hp,s.max_hp,s.mp,s.max_mp,m.left_at FROM dungeon_members m JOIN characters c ON c.id=m.character_id
     JOIN character_stats s ON s.character_id=c.id WHERE m.instance_id=$1 ORDER BY m.joined_at, c.id`, [instId])).rows;
 }
 const activeBattleRow = async (c: pg.PoolClient, instId: string, lock = false) =>
@@ -43,7 +43,7 @@ async function dview(c: pg.PoolClient, inst: any, me: string) {
     leader: inst.leader_character_id, expiresAt: inst.expires_at, isBoss: !!fl.boss, enemies: fl.boss ? [fl.boss] : fl.enemies ?? [],
     gateCleared: !!st.gates?.[inst.current_floor], hasChest: !!fl.chest, chestOpened: !!cl[`chest:${inst.current_floor}:${me}`],
     clearClaimed: !!cl[`clear:${me}`], battleId: b?.id ?? null,
-    members: (await members(c, inst.id)).map((m) => ({ id: m.id, name: m.name, class: m.class, level: m.level, hp: m.hp, maxHp: m.max_hp, mp: m.mp, maxMp: m.max_mp,
+    members: (await members(c, inst.id)).map((m) => ({ id: m.id, name: m.name, class: m.class, look: m.appearance, level: m.level, hp: m.hp, maxHp: m.max_hp, mp: m.mp, maxMp: m.max_mp,
       left: !!m.left_at, online: hub.online(m.id), inBattle: hub.inBattle(m.id) })),
   };
 }
@@ -186,7 +186,7 @@ export async function startDungeonBattle(userId: string, characterId: string) {
   if (ids.length) notify(ids, { type: 'update' });
   return out;
 }
-const ownCharById = async (c: pg.PoolClient, id: string) => (await c.query(`SELECT c.id,c.name,c.class,c.level,c.exp,c.gold,c.map_id,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id WHERE c.id=$1 FOR UPDATE OF c`, [id])).rows[0];
+const ownCharById = async (c: pg.PoolClient, id: string) => (await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,c.exp,c.gold,c.map_id,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id WHERE c.id=$1 FOR UPDATE OF c`, [id])).rows[0];
 export const isPartyBattle = async (battleId: string) => UUID.test(battleId) && !!(await pool.query('SELECT 1 FROM battle_logs WHERE id=$1 AND dungeon_instance_id IS NOT NULL', [battleId])).rowCount;
 
 /** resolve the stored turn (missing commands = defend). Caller holds the battle row lock. */

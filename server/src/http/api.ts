@@ -14,12 +14,19 @@ import { rateLimit } from './rateLimit.js';
 import { hub } from '../rooms/hub.js';
 import { claimClear, enterDungeon, getDungeon, isPartyBattle, leaveDungeon, nextFloor, openChest, partyAct, startDungeonBattle } from '../services/dungeon.js';
 import * as S from '../services/social.js';
+import * as O from '../services/ops.js';
 type Authed = Request & { auth: { sessionId: string; userId: string; role: string } };
 const wrap = (fn: (req: any, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
 const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+/** session check + maintenance gate (staff keep access during maintenance) */
 const auth = (req: Request, _res: Response, next: NextFunction) => {
-  resolveSession(bearer(req)).then((s) => { if (!s) return next(new HttpError(401, 'unauthorized')); (req as Authed).auth = s; next(); }, next);
+  resolveSession(bearer(req)).then(async (s) => {
+    if (!s) return next(new HttpError(401, 'unauthorized'));
+    if (!O.isStaff(s.role) && req.path !== '/auth/logout' && (await O.maintenance()).on) return next(new HttpError(503, 'maintenance'));
+    (req as Authed).auth = s; next();
+  }, next);
 };
+const actor = (req: Authed) => ({ userId: req.auth.userId, role: req.auth.role, ip: req.ip });
 export function apiRouter(opts: { authLimit?: number; createLimit?: number; battleLimit?: number; actionLimit?: number; moveLimit?: number } = {}) {
   const r = express.Router();
   r.use(express.json({ limit: '10kb' }));
@@ -27,7 +34,25 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.get('/classes', (_q, res) => { res.json(Object.values(CLASSES).map(({ id, name, role, equippable }) => ({ id, name, role, equippable }))); });
   r.get('/exp-table', (_q, res) => { res.json(expTable()); });
   r.post('/auth/register', authRl, wrap(async (req, res) => res.status(201).json(await register(req.body?.email, req.body?.password))));
-  r.post('/auth/login', authRl, wrap(async (req, res) => res.json(await login(req.body?.email, req.body?.password))));
+  r.post('/auth/login', authRl, wrap(async (req, res) => {
+    try {
+      const out = await login(req.body?.email, req.body?.password);
+      const role = (await resolveSession(out.token))?.role;
+      if (!O.isStaff(role) && (await O.maintenance()).on) { const s = await resolveSession(out.token); if (s) await logout(s.sessionId); throw new HttpError(503, 'maintenance'); }
+      O.audit({ userId: out.userId, action: 'auth.login', ip: req.ip }); res.json(out);
+    } catch (e) { if (e instanceof HttpError && e.code === 'invalid_credentials') O.audit({ action: 'auth.login_failed', detail: { email: String(req.body?.email ?? '').slice(0, 80) }, ip: req.ip }); throw e; }
+  }));
+  // PHASE 10: public status / announcements, admin tools (role from DB only)
+  r.get('/status', wrap(async (_q, res) => res.json(await O.publicStatus())));
+  r.get('/announcements', wrap(async (_q, res) => res.json(await O.listAnnouncements())));
+  const admRl = rateLimit('admin', 120, 60_000);
+  r.get('/admin/status', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.serverStatus(actor(req)))));
+  r.get('/admin/logs', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.auditLogs(actor(req), req.query))));
+  r.post('/admin/maintenance', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.setMaintenance(actor(req), req.body?.on, req.body?.message))));
+  r.post('/admin/announcements', auth, admRl, wrap(async (req: Authed, res) => res.status(201).json(await O.createAnnouncement(actor(req), req.body))));
+  r.post('/admin/mute', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminMute(actor(req), req.body?.name, req.body?.minutes))));
+  r.post('/admin/ban', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminBan(actor(req), req.body?.name, req.body?.ban))));
+  r.post('/admin/grant', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminGrant(actor(req), req.body))));
   r.post('/auth/logout', auth, wrap(async (req: Authed, res) => { await logout(req.auth.sessionId); res.status(204).end(); }));
   r.get('/me', auth, wrap(async (req: Authed, res) => res.json({ userId: req.auth.userId })));
   r.get('/characters', auth, wrap(async (req: Authed, res) => res.json(await listCharacters(req.auth.userId))));
@@ -87,7 +112,7 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   soc('invites/decline', (u, c, b) => S.inviteDecline(u, c, b.kind, b.id));
   soc('guild/create', (u, c, b) => S.guildCreate(u, c, b.name)); soc('guild/invite', (u, c, b) => S.guildInvite(u, c, b.name)); soc('guild/accept', (u, c, b) => S.guildAccept(u, c, b.guildId)); soc('guild/leave', (u, c) => S.guildLeave(u, c));
   soc('guild/rank', (u, c, b) => S.guildSetRank(u, c, b.characterId, b.rank)); soc('guild/transfer', (u, c, b) => S.guildTransfer(u, c, b.characterId));
-  soc('guild/kick', (u, c, b) => S.guildKick(u, c, b.characterId)); soc('guild/disband', (u, c, b) => S.guildDisband(u, c, b.confirmName));
+  soc('guild/kick', (u, c, b) => S.guildKick(u, c, b.characterId)); soc('block', (u, c, b) => S.blockAdd(u, c, b.name)); soc('unblock', (u, c, b) => S.blockRemove(u, c, b.characterId)); soc('guild/disband', (u, c, b) => S.guildDisband(u, c, b.confirmName));
   // PHASE 9: player market (requestId-idempotent, escrow) + rankings
   r.get('/market', auth, wrap(async (req: Authed, res) => res.json(await M.browse(req.query as any))));
   r.get('/characters/:id/market', auth, wrap(async (req: Authed, res) => res.json(await M.mine(U(req), P(req)))));

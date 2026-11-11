@@ -2,17 +2,18 @@
  * spam-checked server side. All text is HTML-escaped before rendering. */
 const TABS = ['Local', 'Party', 'Guild', 'System'] as const;
 type Tab = typeof TABS[number];
-const CH: Record<string, Tab> = { local: 'Local', party: 'Party', guild: 'Guild', system: 'System' };
+const CH: Record<string, Tab> = { local: 'Local', party: 'Party', guild: 'Guild', system: 'System', whisper: 'Local' };
 const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const ERR: Record<string, string> = { rate_limited: '送信が速すぎます', duplicate: '同じ内容の連続送信はできません', muted: 'スパム対策のため一時的に発言できません（30秒）',
-  not_in_party: 'パーティーに参加していません', not_in_guild: 'ギルドに所属していません', system_readonly: 'Systemタブには送信できません', invalid_body: '1〜200文字で入力してください', offline: 'サーバー未接続のため送信できません' };
-export type ChatMsg = { id?: number; channel: string; body: string; from?: { id: string; name: string }; at?: string };
-type Sender = (channel: string, body: string) => boolean;
-export const chatBus = { send: null as Sender | null, onMsg: (_m: ChatMsg) => {}, onHistory: (_h: ChatMsg[]) => {}, onError: (_c: string) => {}, system: (_s: string) => {} };
+const ERR: Record<string, string> = { rate_limited: '送信が速すぎます', duplicate: '同じ内容の連続送信はできません', muted: '現在発言が制限されています（スパム対策/運営による制限）',
+  not_in_party: 'パーティーに参加していません', blocked: '相手に届きませんでした', target_offline: '相手はオフラインです', target_not_found: 'そのキャラクターは見つかりません', self: '自分には送れません', invalid_name: '宛先を入力してください（/w 名前 本文）', not_in_guild: 'ギルドに所属していません', system_readonly: 'Systemタブには送信できません', invalid_body: '1〜200文字で入力してください', offline: 'サーバー未接続のため送信できません' };
+export type ChatMsg = { id?: number; channel: string; body: string; from?: { id: string; name: string }; to?: { id: string; name: string }; at?: string };
+type Sender = (channel: string, body: string, to?: string) => boolean;
+export const chatBus = { send: null as Sender | null, onMsg: (_m: ChatMsg) => {}, onHistory: (_h: ChatMsg[]) => {}, onError: (_c: string) => {}, system: (_s: string) => {}, notice: (_m: any) => {} };
 export function mountChat(root: HTMLElement, _playerName: string) {
   const logs: Record<Tab, string[]> = { Local: [], Party: [], Guild: [], System: [] }; const seen = new Set<number>();
   const line = (m: ChatMsg) => {
     const tab = CH[m.channel] ?? 'System';
+    if (m.channel === 'whisper') return { tab, html: `<span class="c-ch c-whisper">[ささやき]</span> <span class="c-name">${esc(m.from?.name ?? '')}</span> → <span class="c-name">${esc(m.to?.name ?? '')}</span>: ${esc(m.body)}` };
     const tag = tab === 'Local' ? '' : `<span class="c-ch c-${m.channel}">[${tab}]</span> `;
     return { tab, html: m.from ? `${tag}<span class="c-name">${esc(m.from.name)}</span>: ${esc(m.body)}` : `<span class="c-sys">[System] ${esc(m.body)}</span>` };
   };
@@ -34,14 +35,18 @@ export function mountChat(root: HTMLElement, _playerName: string) {
   chatBus.onMsg = (m) => { add(m); render(); };
   chatBus.onHistory = (h) => { for (const m of h) add(m); render(); };
   chatBus.onError = showErr;
+  (window as any).__chatBus = chatBus; // test hook
   chatBus.system = (s) => { add({ channel: 'system', body: s }); render(); };
+  chatBus.notice = (n) => { const t = n?.type === 'maintenance' ? `メンテナンス: ${n.message ?? ''}` : n?.type === 'announcement' ? `お知らせ: ${n.title ?? ''}` : n?.type === 'banned' ? 'アカウントが利用停止になりました' : ''; if (t) chatBus.system(t); };
   el.querySelectorAll('.tabs button').forEach((b) => ((b as HTMLButtonElement).onclick = () => { cur = (b as HTMLElement).dataset.t as Tab; render(); }));
   el.querySelector('form')!.addEventListener('submit', (e) => {
     e.preventDefault(); const m = input.value.trim(); if (!m || cur === 'System') return;
-    if (!chatBus.send || !chatBus.send(cur.toLowerCase(), m)) { showErr('offline'); return; }
+    const w = /^\/(?:w|whisper|ささやく)\s+(\S+)\s+(.+)$/i.exec(m); // whisper: /w 名前 本文
+    if (/^\/w(hisper)?\b/i.test(m) && !w) { showErr('invalid_name'); return; }
+    if (!chatBus.send || !(w ? chatBus.send('whisper', w[2], w[1]) : chatBus.send(cur.toLowerCase(), m))) { showErr('offline'); return; }
     input.value = ''; input.blur();
   });
   for (const ev of ['keydown', 'keyup'] as const) input.addEventListener(ev, (e) => e.stopPropagation()); // keep WASD from moving while typing
-  add({ channel: 'system', body: 'アステリアへようこそ！ [O] フレンド/パーティー/ギルド' }); render();
+  add({ channel: 'system', body: 'アステリアへようこそ！ [O] フレンド/パーティー/ギルド　ささやき: /w 名前 本文' }); render();
   return el;
 }

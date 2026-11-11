@@ -16,7 +16,7 @@ async function load() { try { data = await api('GET', `/characters/${cid}/social
 async function act(path: string, body: any, ok: string) {
   try { await api('POST', `/characters/${cid}/${path}`, body); msg = ok; msgOk = true; } catch (e) { msg = errText(e); msgOk = false; } await load();
 }
-const st = (m: any) => `${m.online ? '<span class="s-on">●</span>' : '<span class="s-off">○</span>'}${m.inBattle ? '<span class="s-bt" title="戦闘中">⚔戦闘中</span>' : ''}`;
+const st = (m: any) => `${m.online ? '<span class="s-on">●</span>' : '<span class="s-off">○</span>'}${m.inBattle ? '<span class="s-bt" title="戦闘中">戦闘中</span>' : ''}`;
 const who = (m: any) => `${st(m)} <b>${esc(m.name)}</b> <small>${CLS[m.cls] ?? m.cls ?? ''} Lv${m.level ?? '?'}${m.map ? ' / ' + esc(m.map) : ''}</small>`;
 function render() {
   if (!el || !data) return; const d = data, me = d.me?.id ?? cid, lead = d.party?.leader === me;

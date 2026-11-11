@@ -48,3 +48,13 @@
 - server/src/rooms/hub.ts: characterId→接続のプロセス内レジストリ。Party/Guild/System 配信と戦闘中フラグに使用。単一プロセス前提（複数ノード化時は Redis presence へ置換）
 - スパム判定はメモリ内（プロセス単位）。Local は channel 'say'、scope=mapId で保存
 - 招待は social_invites（migration 006）、party_members.character_id にユニーク制約
+
+## TD-016 インスタンスダンジョン/パーティー戦闘（PHASE 8）
+- 1回の攻略 = dungeon_instances 1行。在室は dungeon_members（キャラごとに有効1件の部分ユニーク索引）。マスターは `packages/shared/src/dungeons.ts`（推奨Lv・入場条件Lv・制限時間・階層・敵・ボス・宝箱・報酬・再入場クールダウン）
+- 入場はパーティーリーダーのみ。同マップ・オンライン・戦闘中でない・入場条件を満たすメンバーを一括入場（満たさない人はスキップして通知）
+- パーティー戦闘は battle_logs（character_id NULL、participants 配列、pending/deadline_at）。全生存メンバーのコマンドが揃うか、未提出者が全員オフライン、または期限（DUNGEON_TURN_MS=20秒）経過で解決（未提出=防御）。期限はサーバーの1秒スイープ
+- コマンドは提出時に乾式検証（固定乱数）するため、不正コマンドでパーティーが止まらない。アイテムは各自の所持品から消費
+- 報酬: 戦闘はフラグ1回反転＋メンバー別 transactions 一意キー、宝箱/クリア報酬は rewards_claimed の条件付きjsonb更新＋一意キーの二重ガード
+- ボスのフェーズ制: monster_definitions.behavior.phases（HP割合しきい値で倍率と行動表を差し替え、shared の resolveTurn で判定）。フェーズ表はクライアントへ送らない
+- DungeonRoom（instanceId でフィルタ）は在室・通知の経路のみ。状態の正は Postgres + REST
+- 環境: /opt が箱リセットで消えるため PG バイナリは `/workspace/.tools/astral-pg`、`scripts/bootstrap-env.sh` で再構築（node_modules・PGバイナリ・空ディレクトリ）

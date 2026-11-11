@@ -5,6 +5,7 @@ import { BootScene } from './scenes/BootScene';
 import { WorldScene } from './scenes/WorldScene';
 import { HudScene } from './scenes/HudScene';
 import { BattleScene } from './scenes/BattleScene';
+import { DungeonScene } from './scenes/DungeonScene';
 import { session, type CharacterDto } from './api';
 import { mountChat } from './chat';
 import { mountSocial } from './social';
@@ -18,7 +19,7 @@ await document.fonts.ready;
 const game = new Phaser.Game({
   type: Phaser.AUTO, parent: 'game', backgroundColor: '#10121c', pixelArt: true, roundPixels: true,
   scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
-  scene: [BootScene, WorldScene, HudScene, BattleScene],
+  scene: [BootScene, WorldScene, HudScene, BattleScene, DungeonScene],
 });
 (window as any).__astral = game; // debug hook for automated browser tests
 
@@ -27,7 +28,7 @@ function enterWorld(c: CharacterDto) {
   const hud = document.createElement('div'); hud.id = 'hudbar'; hud.innerHTML = '<button id="logout">ログアウト</button>';
   document.getElementById('ui')!.appendChild(hud);
   mountChat(document.getElementById('ui')!, c.name); mountSocial(document.getElementById('ui')!, c.id);
-  hud.querySelector('button')!.onclick = () => { game.scene.stop('Battle'); game.scene.stop('World'); game.scene.stop('Hud'); logout(enterWorld); };
+  hud.querySelector('button')!.onclick = () => { game.scene.stop('Battle'); game.scene.stop('Dungeon'); game.scene.stop('World'); game.scene.stop('Hud'); logout(enterWorld); };
   game.scene.start('World', { character: c });
   game.scene.start('Hud', { character: c });
 }

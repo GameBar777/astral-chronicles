@@ -91,3 +91,18 @@ button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
 #social .s-on{color:#7af07a} #social .s-off{color:#777} #social .s-bt{color:#ff8a5a;margin-left:3px;font-size:12px} #social .s-lead{color:#ffd700} #social .s-none{color:#9a9488;font-size:13px}
 #social input{padding:3px 6px;font-size:13px;background:#080b16;border:1px solid #5a6090;color:#fff;width:120px} #social .s-inv{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:6px}
 #social.hidden{display:none}
+/* PHASE 8 */
+.confirm { pointer-events: auto; position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 50; }
+.c-box { background: #1a1428f2; border: 2px solid #9a82d0; border-radius: 10px; padding: 18px 22px; max-width: 420px; line-height: 1.6; }
+.c-btns { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+.confirm button, #dungeon button { font-family: inherit; font-size: 14px; padding: 7px 14px; background: #4a3a7a; color: #fff; border: 1px solid #b8a0ff; border-radius: 6px; cursor: pointer; }
+.confirm button.ghost, #dungeon button.ghost { background: #2a2436; border-color: #6a6080; }
+#dungeon button:disabled { opacity: .4; cursor: default; }
+#dungeon { pointer-events: auto; position: fixed; right: 12px; top: 56px; width: 290px; background: #120e1ce8; border: 2px solid #7a62b0; border-radius: 10px; padding: 12px 14px; z-index: 20; font-size: 13px; }
+#dungeon.hidden { display: none; }
+#dungeon h3 { margin: 0 0 2px; font-size: 17px; color: #e8d8ff; font-weight: normal; } #dungeon .d-floor { color: #c0b0e0; margin-bottom: 8px; }
+#dungeon .d-m { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; padding: 5px 0; border-top: 1px solid #ffffff14; }
+#dungeon .d-m .hp { grid-column: 1 / 3; height: 6px; background: #05070e; border-radius: 3px; overflow: hidden; } #dungeon .d-m .hp i { display: block; height: 100%; background: #5ad05a; }
+#dungeon .d-m.off { opacity: .5; } #dungeon .d-tag { font-size: 11px; color: #ffb08a; } #dungeon .lead { color: #ffe08a; }
+#dungeon .d-act { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; } #dungeon .d-msg { margin-top: 8px; min-height: 18px; color: #fff4cc; }
+.b-member { font-size: 14px; padding: 2px 0; }

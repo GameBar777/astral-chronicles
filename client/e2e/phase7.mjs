@@ -89,23 +89,23 @@ const fl = (await db.query(`SELECT count(*) FILTER (WHERE body LIKE '連投%')::
 ok('flood capped: ≤5 msgs per 10s stored', fl.n < 9 && fl.w <= 5, JSON.stringify(fl));
 await shot(C, 'phase7-chat-spam.png');
 
-// --- In-battle marker: A and B to the meadow, A starts a battle, B sees ⚔
+// --- In-battle marker: A and B to the meadow, A starts a battle, B sees [戦闘中]
 for (const [P, x] of [[A, 330], [B, 520]]) {
   await P.tp(x, 300, 'green_meadow');
   await P.p.evaluate(([x]) => { const s = window.__astral.scene.getScene('World'); s.scene.restart({ character: { ...s.character, map_id: 'green_meadow', pos_x: x, pos_y: 300 } }); }, [x]);
   await P.p.waitForFunction(() => window.__astral.scene.getScene('World').map?.id === 'green_meadow' && window.__astral.scene.getScene('World').presence?.status === 'online', null, { timeout: 8000 });
 }
-ok('B sees A in meadow (no ⚔)', await waitFor(async () => { const t = await tagOf(B, A.name); return t && !t.includes('⚔'); }));
+ok('B sees A in meadow (no [戦闘中])', await waitFor(async () => { const t = await tagOf(B, A.name); return t && !t.includes('[戦闘中]'); }));
 await A.p.evaluate(() => { const s = window.__astral.scene.getScene('World'); s.cooldownUntil = 0; return s.encounter(s.symbols[0]); });
 await A.p.waitForFunction(() => window.__astral.scene.isActive('Battle'), null, { timeout: 8000 });
-ok('B sees ⚔ on A name tag', await waitFor(async () => (await tagOf(B, A.name))?.startsWith('⚔')));
-await panel(B); ok('B party list shows A ⚔戦闘中', await waitFor(async () => B.p.evaluate((n) => [...document.querySelectorAll('#social .s-row')].some((r) => r.textContent.includes(n) && r.querySelector('.s-bt')), A.name)));
+ok('B sees [戦闘中] on A name tag (BUG-019)', await waitFor(async () => (await tagOf(B, A.name))?.startsWith('[戦闘中] ')));
+await panel(B); ok('B party list shows A 戦闘中', await waitFor(async () => B.p.evaluate((n) => [...document.querySelectorAll('#social .s-row')].some((r) => r.textContent.includes(n) && r.querySelector('.s-bt')), A.name)));
 await B.p.keyboard.press('o'); await B.p.waitForTimeout(150); await B.p.click('canvas').catch(() => {}); await B.p.waitForTimeout(300);
 await shot(B, 'phase7-in-battle.png');
 // end A's battle (flee via API until it ends) and the marker disappears
 await A.p.evaluate(async () => { const s = window.__astral.scene.getScene('Battle'); let b = s.b; const tok = sessionStorage.getItem('astral.token');
   for (let i = 0; i < 40 && b.status === 'active'; i++) { const r = await fetch(`/api/battles/${b.id}/action`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ turn: b.turn, command: { type: 'flee' } }) }); b = await r.json(); if (!b.turn) break; } });
-ok('⚔ cleared after battle ends', await waitFor(async () => { const t = await tagOf(B, A.name); return t && !t.includes('⚔'); }));
+ok('[戦闘中] cleared after battle ends', await waitFor(async () => { const t = await tagOf(B, A.name); return t && !t.includes('[戦闘中]'); }));
 
 // --- History: B reloads and sees earlier party chat + system notices
 await B.p.reload(); await B.p.waitForSelector('.play', { timeout: 10000 }); await B.p.click('.play');

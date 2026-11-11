@@ -15,14 +15,19 @@ for (let i = 0; i < N; i++) {
   const ch = arr[0] ?? await post('/characters', { name: '負荷' + kana(Date.now() + i * 13), class: ['warrior', 'mage', 'knight', 'priest'][i % 4], appearance: { bodyType: 'a', hairStyle: 0, hairColor: 0, skinColor: 0 } }, token);
   const c = ch.character ?? ch; bots.push({ token, id: c.id, x: c.pos_x ?? c.x, y: c.pos_y ?? c.y });
 }
+// start every bot on the open plaza at the town spawn (positions persist between runs and can drift into corners)
+{ const { config } = await import('dotenv'); config({ path: new globalThis.URL('../../.env', import.meta.url).pathname }); const pg = (await import('pg')).default;
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect();
+  await db.query(`UPDATE characters SET map_id='asteria', pos_x=720, pos_y=697.6 WHERE id = ANY($1::uuid[])`, [bots.map((b) => b.id)]); await db.end();
+  for (const b of bots) { b.x = 720; b.y = 697.6; } }
 const rssBefore = rss();
-const stats = { lat: [], patches: 0, corrections: 0, seenMax: 0, errors: 0 };
+const stats = { lat: [], patches: 0, corrections: 0, seenMax: 0, errors: 0, reasons: {} };
 await Promise.all(bots.map(async (b, i) => {
   b.room = await new Client(WS).joinOrCreate('world', { token: b.token, characterId: b.id, mapId: 'asteria' });
   b.room.onStateChange(() => { stats.patches++; const ps = b.room.state.players; if (!ps) return; stats.seenMax = Math.max(stats.seenMax, ps.size);
     ps.forEach((p) => { if (p.id !== b.id) return; const k = `${p.x},${p.y}`; const t = b.sent?.get(k); if (t) { stats.lat.push(performance.now() - t); b.sent.delete(k); } }); });
-  b.room.onMessage('correct', (m) => { stats.corrections++; if (m?.pos) { b.x = m.pos.x; b.y = m.pos.y; } });
-  b.room.onError(() => stats.errors++);
+  b.room.onMessage('correct', (m) => { stats.corrections++; stats.reasons[m?.reason ?? '?'] = (stats.reasons[m?.reason ?? '?'] ?? 0) + 1; if (m?.pos) { b.x = m.pos.x; b.y = m.pos.y; } if (m?.reason === 'blocked') b.dir *= -1; }); // hit a wall: turn around
+  b.room.onError(() => stats.errors++); for (const t of ['chat_history', 'chat', 'social', 'system_notice']) b.room.onMessage(t, () => {});
   b.sent = new Map(); b.dir = i % 2 ? 1 : -1; b.ox = b.x;
 }));
 const t0 = Date.now();
@@ -39,5 +44,5 @@ for (const b of bots) await b.room.leave(true);
 const L = stats.lat.sort((a, b) => a - b), q = (f) => L.length ? L[Math.min(L.length - 1, Math.floor(L.length * f))].toFixed(1) : 'n/a';
 const sent = bots.length * Math.floor(DURATION * HZ);
 console.log(JSON.stringify({ clients: N, durationSec: DURATION, movesSent: sent, echoed: L.length, echoLatencyMs: { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: L.length ? L.at(-1).toFixed(1) : 'n/a' },
-  patchesPerClientPerSec: +(stats.patches / N / DURATION).toFixed(1), corrections: stats.corrections, maxPlayersSeen: stats.seenMax, errors: stats.errors, serverRssMB: { before: rssBefore, after: rssAfter } }, null, 1));
+  patchesPerClientPerSec: +(stats.patches / N / DURATION).toFixed(1), corrections: stats.corrections, correctionReasons: stats.reasons, maxPlayersSeen: stats.seenMax, errors: stats.errors, serverRssMB: { before: rssBefore, after: rssAfter } }, null, 1));
 process.exit(0);

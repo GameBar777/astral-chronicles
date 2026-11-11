@@ -136,3 +136,4 @@ table.rk tr.top1 td{color:#ffd76a}table.rk tr.top2 td{color:#dfe6f0}table.rk tr.
 #touch .tb{position:fixed;right:20px;bottom:calc(30vh + 40px);width:70px;height:70px;border-radius:50%;background:#d9b45ecc;color:#1a1208;font:bold 20px "DotGothic16",sans-serif;border:none;pointer-events:auto;touch-action:none}
 #touch .tb.menu{right:100px;bottom:calc(30vh + 10px);width:56px;height:56px;font-size:13px;background:#4a3a7acc;color:#fff}
 @media (max-width: 760px){ .p4{left:4px;right:4px;top:52px;width:auto!important} #chat{width:calc(100vw - 16px)!important;max-height:28vh;left:8px!important} #chat .log{max-height:16vh} #hudbar{top:136px} #hudbar button{font-size:12px;padding:4px 8px} .mn-grid{grid-template-columns:1fr 1fr} }
+body:has(#p4) #touch, body:has(#battle-ui) #touch, body:has(#dungeon) #touch{display:none} /* touch pad only while walking */

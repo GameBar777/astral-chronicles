@@ -22,3 +22,4 @@ export function promptBox(html: string, okLabel: string): Promise<string | null>
     (d.querySelector('#c-ok') as HTMLButtonElement).onclick = () => done(inp.value); (d.querySelector('#c-no') as HTMLButtonElement).onclick = () => done(null);
   });
 }
+export const battlePort = { ready: (_v: boolean) => {} };

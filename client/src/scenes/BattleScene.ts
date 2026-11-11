@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { SKILLS, BATTLE_ITEMS, STATUS_DEFS, type BattleEvent } from '@astral/shared';
 import { api, errText, type CharacterDto } from '../api';
 import { playBgm, sfx } from '../audio';
+import { battlePort } from '../dungeonBus';
 const MAGIC_NAMES = Object.values(SKILLS).filter((s) => s.type === 'magic').map((s) => s.name);
 const FONT = '"DotGothic16", sans-serif';
 export interface BattleView { id: string; zone?: string; turn: number; status: 'active' | 'victory' | 'defeat' | 'fled'; canFlee: boolean; combatants: any[]; log: BattleEvent[];
@@ -28,6 +29,8 @@ export class BattleScene extends Phaser.Scene {
     this.b = data.battle; this.c = data.character; this.done = data.onEnd; this.sprites.clear(); this.bars.clear(); this.logLines = [];
     const W = this.scale.width, H = this.scale.height;
     this.party = !!this.b.dungeonInstanceId; this.chain = Promise.resolve();
+    battlePort.ready(true);
+    this.events.once('shutdown', () => battlePort.ready(false));
     const bg = this.add.image(W / 2, H / 2, 'battle_meadow'); bg.setScale(Math.max(W / bg.width, H / bg.height));
     if (this.party) { bg.setTint(0x6a5a8a); this.add.rectangle(0, 0, W, H, 0x100818, 0.35).setOrigin(0); } // underground: darkened meadow backdrop (placeholder)
     this.add.rectangle(0, H, W, H * 0.34, 0x000000, 0.25).setOrigin(0, 1);

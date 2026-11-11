@@ -16,6 +16,8 @@ export class DungeonRoom extends Room {
   onCreate(opts: { instanceId: string }) {
     this.instanceId = String(opts.instanceId ?? '');
     this.onMessage('chat', (client, m) => this.chat(client, m));
+    this.onMessage('battle_ready', (client) => { const a = client.auth as Auth; if (a) hub.setBattleReady(a.characterId, true); });
+    this.onMessage('battle_idle', (client) => { const a = client.auth as Auth; if (a) hub.setBattleReady(a.characterId, false); });
   }
   async onAuth(_c: Client, opts: { token?: string; characterId?: string; instanceId?: string }) {
     const s = await resolveSession(opts?.token); if (!s) throw new ServerError(401, 'unauthorized');
@@ -44,7 +46,7 @@ export class DungeonRoom extends Room {
     if (a && !consented && !this.kicked.delete(client.sessionId)) {
       try { const nc = await this.allowReconnection(client, RECONNECT_SEC); hub.set(a.characterId, { client: nc, room: this, mapId: `dungeon:${this.instanceId}` }); this.pingPresence(); return; } catch { /* timed out */ }
     }
-    if (a) hub.remove(a.characterId, client);
+    if (a) { hub.setBattleReady(a.characterId, false); hub.remove(a.characterId, client); }
     this.pingPresence();
   }
 }

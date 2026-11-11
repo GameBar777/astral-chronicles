@@ -5,6 +5,7 @@ import { api, errText, session, type CharacterDto } from '../api';
 import { wsEndpoint } from '../net';
 import { chatBus } from '../chat';
 import { playBgm } from '../audio';
+import { battlePort } from '../dungeonBus';
 import { socialBus } from '../social';
 import type { BattleView } from './BattleScene';
 const FONT = '"DotGothic16", sans-serif';
@@ -41,6 +42,11 @@ export class DungeonScene extends Phaser.Scene {
   attach(room: Room) {
     if (this.closed) { room.leave(true); return; }
     this.room = room; this.netStatus = 'online'; this.renderPanel();
+    const sendReady = (v: boolean) => { if (this.room) this.room.send(v ? 'battle_ready' : 'battle_idle'); };
+    battlePort.ready = sendReady;
+    if (this.inBattle) sendReady(true);
+    this.events.once('shutdown', () => { if (battlePort.ready === sendReady) battlePort.ready = () => {}; });
+
     room.onMessage('dungeon', (m: any) => this.onDungeon(m));
     room.onMessage('battle', (v: BattleView) => this.onBattlePush(v));
     room.onMessage('battle_wait', (m: any) => (this.scene.get('Battle') as any)?.onWait?.(m));
@@ -77,6 +83,7 @@ export class DungeonScene extends Phaser.Scene {
     if (this.d?.battleId && !this.inBattle) {
       const r = await api<{ battle: BattleView | null }>('GET', `/characters/${this.c.id}/battle`).catch(() => ({ battle: null }));
       if (r.battle && !this.inBattle && !this.closed) this.openBattle({ ...r.battle, resumed: true });
+      else if (!r.battle && !this.closed) this.time.delayedCall(400, () => { if (!this.inBattle && !this.closed) this.refresh(); });
     }
     this.draw(); this.renderPanel();
   }

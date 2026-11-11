@@ -27,7 +27,8 @@ const gold = async (id: string) => Number((await pool.query('SELECT gold FROM ch
 let A: any, Bu: any, C: any; const rooms: Room[] = [];
 const box = (r: Room) => { const b: any = { battle: [], wait: [], dungeon: [] }; r.onMessage('battle', (m) => b.battle.push(m)); r.onMessage('battle_wait', (m) => b.wait.push(m)); r.onMessage('dungeon', (m) => b.dungeon.push(m)); r.onMessage('*', () => {}); return b; };
 const joinWorld = async (u: any) => { const r = await new Client(WS).joinOrCreate('world', { token: u.t, characterId: u.id, mapId: 'green_meadow' }); r.onMessage('*', () => {}); rooms.push(r); return r; };
-const joinDg = async (u: any, instanceId: string) => { const r = await new Client(WS).joinOrCreate('dungeon', { token: u.t, characterId: u.id, instanceId }); rooms.push(r); return r; };
+const joinDg = async (u: any, instanceId: string, ready = true) => { const r = await new Client(WS).joinOrCreate('dungeon', { token: u.t, characterId: u.id, instanceId }); rooms.push(r); await wait(50); if (ready) r.send('battle_ready'); await wait(30); return r; };
+const arm = async (...rs: Room[]) => { for (const r of rs) r.send('battle_ready'); await wait(40); };
 beforeAll(async () => {
   await resetDb(); await gameServer.listen(PORT);
   A = await user('a8@example.com', '遺跡A'); Bu = await user('b8@example.com', '遺跡B'); C = await user('c8@example.com', '遺跡C');
@@ -112,6 +113,7 @@ describe('PHASE 8 instance dungeon', () => {
   });
   it('turn deadline: an idle member defaults to defend; a disconnected member does not block the turn', async () => {
     await pool.query('UPDATE character_stats SET atk=1 WHERE character_id = ANY($1)', [[A.id, Bu.id]]); // weak party keeps the battle alive
+    await arm(ra, rb);
     const b = await S(A, 'dungeon/battle'); const id = b.body.id; const e = b.body.combatants.find((c: any) => c.side === 'enemy').id;
     expect((await call('POST', `/battles/${id}/action`, { turn: 1, command: { type: 'attack', target: e } }, A.t)).body.waiting).toBe(true);
     await wait(900); await sweepDungeons();
@@ -133,6 +135,7 @@ describe('PHASE 8 instance dungeon', () => {
     const d = await D(A); expect(d.floor).toBe(3); expect(d.isBoss).toBe(true);
     expect((await S(A, 'dungeon/claim')).body.error).toBe('not_cleared');
     await stats(A.id, 75); await stats(Bu.id, 75);
+    await arm(ra, rb);
     const b = await S(A, 'dungeon/battle'); expect(b.body.canFlee).toBe(false);
     expect(b.body.combatants.find((c: any) => c.side === 'enemy').phases).toBeUndefined(); // phase table not sent to clients
     await fight(b.body.id, [A, Bu]);
@@ -156,7 +159,40 @@ describe('PHASE 8 instance dungeon', () => {
     const ok2 = await S(A, 'dungeon/enter', { dungeonId: 'ancient_ruins' }); expect(ok2.status).toBe(201);
     await S(A, 'dungeon/leave'); await S(Bu, 'dungeon/leave');
   });
+  it('BUG-023: a member online in the dungeon room but without battle_ready does not stall the turn', async () => {
+    // C enters a fresh instance alone first so we can add A+B as a separate party later is messy;
+    // reuse the current instance? it may already be cleared. Start a brand-new run with 3 members.
+    for (const u of [A, Bu, C]) { await toEntrance(u.id); await stats(u.id, 1, 400); }
+    await pool.query(`UPDATE dungeon_members SET left_at=coalesce(left_at, now()) WHERE character_id = ANY($1) AND left_at IS NULL`, [[A.id, Bu.id, C.id]]);
+    await pool.query(`UPDATE dungeon_instances SET status='failed', ended_at=coalesce(ended_at,now()) WHERE status='active' AND id IN (SELECT instance_id FROM dungeon_members WHERE character_id = ANY($1))`, [[A.id, Bu.id, C.id]]);
+    await wait(50);
+    // C is not in the party of A — re-form? The earlier tests already have a party of A+B; C is solo.
+    // Use A+B only, with B joining the dungeon room but NOT sending battle_ready (simulates a reload stuck on the dungeon panel).
+    const ok = await S(A, 'dungeon/enter', { dungeonId: 'ancient_ruins' }); expect(ok.status).toBe(201);
+    const inst2 = ok.body.dungeon.id as string;
+    const ra2 = await joinDg(A, inst2, true);
+    const rb2 = await joinDg(Bu, inst2, false); // online, not battle-ready
+    const b = await S(A, 'dungeon/battle'); const id = b.body.id;
+    const e = b.body.combatants.find((c: any) => c.side === 'enemy').id;
+    const t0 = Date.now();
+    const r = await call('POST', `/battles/${id}/action`, { turn: 1, command: { type: 'attack', target: e } }, A.t);
+    expect(r.body.waiting, JSON.stringify({ ...r.body, log: undefined, combatants: undefined })).toBeUndefined();
+    expect(r.body.turn).toBe(2);
+    expect(Date.now() - t0).toBeLessThan(600); // must not have waited for the 800ms deadline
+    const st = (await pool.query('SELECT state FROM battle_logs WHERE id=$1', [id])).rows[0].state;
+    const pb = st.combatants.find((x: any) => x.characterId === Bu.id).id;
+    expect(st.log.some((l: any) => l.turn === 1 && l.actor === pb && l.kind === 'defend')).toBe(true);
+    // once B signals ready, the next turn does wait
+    rb2.send('battle_ready'); await wait(50);
+    const r2 = await call('POST', `/battles/${id}/action`, { turn: 2, command: { type: 'attack', target: e } }, A.t);
+    expect(r2.body.waiting).toBe(true);
+    const r3 = await call('POST', `/battles/${id}/action`, { turn: 2, command: { type: 'attack', target: e } }, Bu.t);
+    expect(r3.body.turn === 3 || r3.body.status !== 'active' || r2.body.turn === 3).toBe(true);
+    await S(A, 'dungeon/leave').catch(() => {}); await S(Bu, 'dungeon/leave').catch(() => {});
+    await Promise.all([ra2.leave(true).catch(() => {}), rb2.leave(true).catch(() => {})]);
+  });
   it('defeat: whole party returns to town at 30% HP and the instance fails', async () => {
+    if (!(await D(C))) { await toEntrance(C.id); const ent = await S(C, 'dungeon/enter', { dungeonId: 'ancient_ruins' }); expect(ent.status).toBe(201); }
     await pool.query('UPDATE character_stats SET hp=1, max_hp=100, def=0, atk=1 WHERE character_id=$1', [C.id]);
     const b = await S(C, 'dungeon/battle');
     let cur = b.body; for (let i = 0; i < 20 && cur.status === 'active'; i++) cur = (await call('POST', `/battles/${b.body.id}/action`, { turn: cur.turn, command: { type: 'defend' } }, C.t)).body;

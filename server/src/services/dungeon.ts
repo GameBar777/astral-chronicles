@@ -12,6 +12,8 @@ import { addItem, battleRng, consumeItem, fixedMonsters, grantBattleReward, gran
  * Party battles: every member submits a command; the turn resolves when all living members have submitted, when the
  * remaining ones are offline, or when the deadline passes (missing = defend). All writes happen under the battle row lock.
  */
+const DBG = process.env.DUNGEON_DEBUG === '1';
+export const dlog = (...a: unknown[]) => { if (DBG) console.log('[dungeon]', new Date().toISOString().slice(11, 23), ...a); };
 export const turnMs = () => Number(process.env.DUNGEON_TURN_MS ?? 20_000);
 const ZONE = 'ancient_ruins';
 
@@ -156,6 +158,7 @@ export const claimClear = (userId: string, characterId: string) => tx(async (c) 
 /* ---------------- party battle ---------------- */
 type Push = { ids: string[]; per: Record<string, unknown>; ended: boolean; row: any; st: BattleState; events: any[]; instIds: string[] };
 function broadcast(p: Push, except?: string) {
+  dlog('push turn', p.st.turn, p.st.status, 'to', p.ids.filter((i) => i !== except).map((i) => `${i.slice(0, 4)}@${hub.mapOf(i)}`));
   for (const id of p.ids) if (id !== except) hub.send([id], 'battle', view({ ...p.row, state: p.st }, { events: p.events, ...(p.per[id] as object ?? {}), pending: [] }));
   if (p.ended) for (const id of p.ids) hub.setBattle(id, false);
   notify(p.instIds, { type: 'update' });
@@ -244,7 +247,11 @@ export async function partyAct(userId: string, battleId: string, turn: number, c
     invBy[me.id] = await inventoryCounts(c, myId);
     resolveTurn(st, probe, () => 0.5, {}, invBy);
     row.pending = { ...(row.pending ?? {}), [me.id]: command };
-    const waiting = alive.filter((p) => !row.pending[p.id] && hub.online(p.characterId!));
+    // BUG-023: a member who is merely in the dungeon room (online) but whose Battle scene is not up
+    // must not stall the party — they auto-defend this turn and catch the next state when they open Battle.
+    // Members who have sent battle_ready block the turn until they act or the deadline fires.
+    const waiting = alive.filter((p) => !row.pending[p.id] && hub.online(p.characterId!) && hub.battleReady(p.characterId!));
+    dlog('act', myId.slice(0, 4), 'turn', turn, 'waiting', waiting.map((p) => `${p.characterId!.slice(0, 4)} ready=${hub.battleReady(p.characterId!)} @${hub.mapOf(p.characterId!)}`));
     if (!waiting.length) { push = await resolveParty(c, row); return view({ ...row, state: push.st }, { events: push.events, ...(push.per[myId] as object), pending: [] }); }
     const dl = row.deadline_at ?? new Date(Date.now() + turnMs());
     await c.query('UPDATE battle_logs SET pending=$2, deadline_at=$3, updated_at=now() WHERE id=$1', [row.id, JSON.stringify(row.pending), dl]);
@@ -262,7 +269,7 @@ export async function sweepDungeons() {
     let push: Push | null = null;
     await tx(async (c) => {
       const row = (await c.query('SELECT * FROM battle_logs WHERE id=$1 AND result IS NULL AND deadline_at < now() FOR UPDATE SKIP LOCKED', [id])).rows[0];
-      if (row) push = await resolveParty(c, row);
+      if (row) { dlog('sweep resolves turn', row.state.turn, 'pending', Object.keys(row.pending ?? {})); push = await resolveParty(c, row); }
     }).catch((e) => console.error('[dungeon sweep]', e));
     if (push) broadcast(push);
   }

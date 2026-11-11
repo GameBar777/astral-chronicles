@@ -126,4 +126,22 @@ describe('market price history', () => {
     const empty = await call('GET', '/market/history/iron_ore', undefined, A.t);
     expect(empty.body.sales).toEqual([]); expect(empty.body.avg).toBeNull();
   });
+
+  it('crossed concurrent buys (A buys B, B buys A) both succeed without deadlock', async () => {
+    await pool.query(`UPDATE characters SET map_id='asteria' WHERE id=ANY($1)`, [[A.id, B.id]]);
+    await setGold(A.id, 1000); await setGold(B.id, 1000);
+    const aHerb = await give(A.id, 'herb', 3);
+    const bHerb = await give(B.id, 'herb', 3);
+    const lA = await S(A, 'market/list', { inventoryId: aHerb, qty: 1, price: 40, hours: 1, requestId: rid() });
+    const lB = await S(B, 'market/list', { inventoryId: bHerb, qty: 1, price: 50, hours: 1, requestId: rid() });
+    expect(lA.status).toBe(200); expect(lB.status).toBe(200);
+    const [buyA, buyB] = await Promise.all([
+      S(A, 'market/buy', { listingId: lB.body.listingId, expectedPrice: 50, requestId: rid() }),
+      S(B, 'market/buy', { listingId: lA.body.listingId, expectedPrice: 40, requestId: rid() }),
+    ]);
+    expect(buyA.status).toBe(200);
+    expect(buyB.status).toBe(200);
+    expect(buyA.body.error).toBeUndefined();
+    expect(buyB.body.error).toBeUndefined();
+  });
 });

@@ -11,7 +11,7 @@ import { WorldRoom } from './rooms/WorldRoom.js';
 import { DungeonRoom } from './rooms/DungeonRoom.js';
 import { startDungeonSweep } from './services/dungeon.js';
 
-export function createGameServer(opts: { authLimit?: number; createLimit?: number; battleLimit?: number } = {}) {
+export function createGameServer(opts: { authLimit?: number; createLimit?: number; battleLimit?: number; actionLimit?: number; moveLimit?: number } = {}) {
   const app = express();
   app.disable('x-powered-by');
   if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY); // behind a TLS-terminating proxy: real client IP for rate limits/audit

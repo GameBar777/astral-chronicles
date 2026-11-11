@@ -5,13 +5,18 @@ import { HttpError } from './auth.js';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONFLICT = new Set(['inventory_full', 'not_enough_gold', 'not_enough_materials', 'node_not_ready', 'craft_busy', 'not_ready', 'already_claimed', 'in_battle', 'equipped', 'max_enhance', 'two_handed', 'already_full', 'already_rewarded', 'quest_active', 'quest_done', 'quest_incomplete', 'quest_not_active', 'cannot_sell', 'already_repaired', 'broken', 'not_equipment']);
 export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>, db: pg.Pool = pool) {
-  const c = await db.connect();
-  try { await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r; }
-  catch (e) {
-    await c.query('ROLLBACK').catch(() => {});
-    if (e instanceof BattleError || e instanceof ItemError) throw new HttpError(CONFLICT.has(e.code) ? 409 : 400, e.code);
-    throw e;
-  } finally { c.release(); }
+  for (let attempt = 0; ; attempt++) {
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r;
+    } catch (e: any) {
+      await c.query('ROLLBACK').catch(() => {});
+      if (e instanceof BattleError || e instanceof ItemError) throw new HttpError(CONFLICT.has(e.code) ? 409 : 400, e.code);
+      // 40P01 deadlock / 40001 serialization: retry the whole transaction (mixed market buys lock two character rows)
+      if ((e?.code === '40P01' || e?.code === '40001') && attempt < 3) { await new Promise((r) => setTimeout(r, 20 * (attempt + 1))); continue; }
+      throw e;
+    } finally { c.release(); }
+  }
 }
 /** Owned, alive character; `lock` takes the row lock that serialises every state change of that character. */
 export async function ownChar(c: pg.PoolClient, userId: string, characterId: unknown, lock = false) {

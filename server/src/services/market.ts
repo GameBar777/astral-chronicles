@@ -63,19 +63,25 @@ async function giveBack(c: pg.PoolClient, charId: string, l: any) {
   if (l.enhance_level) await c.query('UPDATE inventory SET enhance_level=$2 WHERE id = ANY($1)', [ids, l.enhance_level]);
 }
 export const buyListing = (userId: string, characterId: unknown, b: any) => tx(async (c) => {
-  const ch = await ownChar(c, userId, characterId, true);
+  const ch = await ownChar(c, userId, characterId, false);
   let notifySeller: { id: string; text: string } | null = null;
+  // Peek the seller, then lock buyer+seller in id order BEFORE idem so (1) crossed buys cannot
+  // deadlock and (2) a retried requestId on the same buyer still serialises into a replay.
+  const peek = (await c.query('SELECT seller_character_id FROM market_listings WHERE id=$1', [lid(b.listingId)])).rows[0];
+  if (!peek) throw new HttpError(404, 'listing_not_found');
+  await c.query('SELECT id FROM characters WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE', [[ch.id, peek.seller_character_id]]);
   const out = await idem(c, ch.id, b.requestId, 'market_buy', async () => {
-    inTown(ch); await notInBattle(c, ch.id);
+    const me = await ownChar(c, userId, characterId, false);
+    inTown(me); await notInBattle(c, me.id);
     const l = (await c.query(`SELECT l.*, d.name FROM market_listings l JOIN item_definitions d ON d.id=l.item_id WHERE l.id=$1 FOR UPDATE OF l`, [lid(b.listingId)])).rows[0];
     if (!l) throw new HttpError(404, 'listing_not_found');
     if (l.status !== 'active') throw new HttpError(409, 'listing_closed');
     if (new Date(l.expires_at) < new Date()) throw new HttpError(409, 'listing_expired');
-    if (l.seller_character_id === ch.id) throw new HttpError(409, 'own_listing');
+    if (l.seller_character_id === me.id) throw new HttpError(409, 'own_listing');
     if ((await c.query('SELECT 1 FROM characters WHERE id=$1 AND user_id=$2', [l.seller_character_id, userId])).rowCount) throw new HttpError(409, 'own_listing'); // no trading between one account's characters
     if (b.expectedPrice !== undefined && Number(b.expectedPrice) !== Number(l.price)) throw new HttpError(409, 'price_changed');
     const price = Number(l.price), fee = marketFee(price, Number(l.fee_rate));
-    const paid = await c.query('UPDATE characters SET gold=gold-$2, updated_at=now() WHERE id=$1 AND gold >= $2 RETURNING gold', [ch.id, price]);
+    const paid = await c.query('UPDATE characters SET gold=gold-$2, updated_at=now() WHERE id=$1 AND gold >= $2 RETURNING gold', [me.id, price]);
     if (!paid.rowCount) throw new ItemError('not_enough_gold');
     await giveBack(c, ch.id, l);
     await c.query(`UPDATE market_listings SET status='sold', buyer_character_id=$2, fee=$3, closed_at=now() WHERE id=$1 AND status='active'`, [l.id, ch.id, fee]);

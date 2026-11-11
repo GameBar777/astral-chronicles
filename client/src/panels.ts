@@ -2,6 +2,7 @@ import { SLOT_NAMES, EQUIP_SLOTS, CATEGORY_NAMES, type EquipSlot, type EquipCate
 import { api, errText, type CharacterDto } from './api';
 /** PHASE 4 DOM panels: inventory/equipment (I key) and the smith (craft + enhance). Every number shown comes from the server. */
 const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+import { sfx } from './audio';
 export const newRequestId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 let root: HTMLDivElement | null = null;
 export const panelOpen = () => !!root;
@@ -42,7 +43,7 @@ export async function openInventory(c: CharacterDto, onChar: (c: CharacterDto) =
     body.querySelectorAll<HTMLElement>('[data-un]').forEach((el) => (el.onclick = () => act(() => api('POST', `/characters/${c.id}/unequip`, { slot: el.dataset.un }), '外した')));
     body.querySelectorAll<HTMLButtonElement>('.it').forEach((el) => (el.onclick = () => {
       if (el.dataset.cat === 'equipment') act(() => api('POST', `/characters/${c.id}/equip`, { inventoryId: el.dataset.id }), '装備した');
-      else if (el.dataset.cat === 'consumable') act(async () => { const r = await api('POST', `/characters/${c.id}/use`, { inventoryId: el.dataset.id, requestId: newRequestId() }); return { text: `${r.name}を使った（HP+${r.healed} MP+${r.mpHealed}）` }; }, '');
+      else if (el.dataset.cat === 'consumable') act(async () => { const r = await api('POST', `/characters/${c.id}/use`, { inventoryId: el.dataset.id, requestId: newRequestId() }); sfx('heal'); return { text: `${r.name}を使った（HP+${r.healed} MP+${r.mpHealed}）` }; }, '');
     }));
   };
   const act = async (fn: () => Promise<any>, okText: string) => {
@@ -81,7 +82,7 @@ export async function openSmith(c: CharacterDto, onChar: (c: CharacterDto) => vo
     body.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab as any; render(); }));
     body.querySelectorAll<HTMLButtonElement>('[data-r]').forEach((b) => (b.onclick = () => run(() => api('POST', `/characters/${c.id}/craft`, { recipeId: b.dataset.r, requestId: newRequestId() }), () => '製作を開始した')));
     body.querySelectorAll<HTMLButtonElement>('[data-e]').forEach((b) => (b.onclick = () => run(() => api('POST', `/characters/${c.id}/enhance`, { inventoryId: b.dataset.e, requestId: newRequestId() }),
-      (r) => (r.success ? `強化成功！ ${r.name} +${r.to}` : `強化失敗… ${r.name} は +${r.from} のまま`), (r) => r.success)));
+      (r) => (sfx(r.success ? 'enhance' : 'hit'), r.success ? `強化成功！ ${r.name} +${r.to}` : `強化失敗… ${r.name} は +${r.from} のまま`), (r) => r.success)));
     const cl = body.querySelector<HTMLButtonElement>('#claim');
     if (cl && job.job) {
       cl.onclick = () => run(() => api('POST', `/characters/${c.id}/craft/${job.job.id}/claim`), (r) => `${r.item.name} ×${r.item.qty} が完成した！`);

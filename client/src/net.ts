@@ -1,3 +1,4 @@
+import { lookTexture } from './art/look';
 import Phaser from 'phaser';
 import { Client, getStateCallbacks, type Room } from 'colyseus.js';
 import { session } from './api';
@@ -7,7 +8,9 @@ import { session } from './api';
  */
 const FONT = '"DotGothic16", sans-serif';
 const FRAME: Record<string, number> = { down: 0, left: 1, right: 2, up: 3 };
-export const wsEndpoint = () => (import.meta as any).env?.VITE_GAME_WS ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:2567`;
+// dev: vite on :5173, game server on :2567. production build: same origin as the page (server serves client/dist; TLS proxy in front)
+export const wsEndpoint = () => { const env = (import.meta as any).env ?? {}; if (env.VITE_GAME_WS) return env.VITE_GAME_WS;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'; return env.PROD ? `${proto}://${location.host}` : `${proto}://${location.hostname}:2567`; };
 import { chatBus } from './chat';
 import { socialBus } from './social';
 import { dungeonBus } from './dungeonBus';
@@ -34,9 +37,9 @@ export class Presence {
     });
     $(room.state).players.onRemove((_p: any, key: string) => { const r = this.remotes.get(key); r?.spr.destroy(); r?.tag.destroy(); this.remotes.delete(key); });
     room.onMessage('chat', (m: any) => chatBus.onMsg(m)); room.onMessage('chat_history', (h: any) => chatBus.onHistory(h ?? []));
-    room.onMessage('chat_error', (m: any) => chatBus.onError(m?.code)); room.onMessage('social', () => socialBus.refresh());
+    room.onMessage('chat_error', (m: any) => chatBus.onError(m?.code)); room.onMessage('system_notice', (m: any) => chatBus.notice(m)); room.onMessage('social', () => socialBus.refresh());
     room.onMessage('dungeon', (m: any) => dungeonBus.onMsg?.(m)); room.onMessage('battle', () => {}); room.onMessage('battle_wait', () => {});
-    chatBus.send = (channel, body) => { if (this.room !== room || this.status !== 'online') return false; room.send('chat', { channel, body }); return true; };
+    chatBus.send = (channel, body, to) => { if (this.room !== room || this.status !== 'online') return false; room.send('chat', { channel, body, ...(to ? { to } : {}) }); return true; };
     room.onMessage('correct', (m: any) => m?.pos && this.onCorrect(m.pos));
     room.onLeave((code) => {
       if (this.room === room) chatBus.send = null;
@@ -54,7 +57,7 @@ export class Presence {
     this.clearRemotes(); this.room = undefined; if (!this.closed) this.connect(); // grace expired: fresh join
   }
   private spawn(key: string, p: any): Remote {
-    const spr = this.scene.add.sprite(p.x, p.y, `ch_${p.cls}`, 0).setOrigin(0.5, 1).setDepth(p.y);
+    const spr = this.scene.add.sprite(p.x, p.y, lookTexture(this.scene, p.cls, p.look), 0).setOrigin(0.5, 1).setDepth(p.y);
     const tag = this.scene.add.text(p.x, p.y - 62, p.name, { fontFamily: FONT, fontSize: '12px', color: '#bfe6ff', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(p.y + 0.2);
     const r = { spr, tag, tx: p.x, ty: p.y, facing: p.facing, moving: p.moving, t: 0 }; this.remotes.set(key, r); return r;
   }

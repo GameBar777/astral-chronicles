@@ -19,6 +19,9 @@ export const hub = {
     onBattle?.(characterId, v);
   },
   clear() { seats.clear(); battle.clear(); },
+  onlineIds() { return [...seats.keys()]; },
+  /** force-disconnect (ban / maintenance) */
+  kick(characterIds: Iterable<string>, reason: string) { for (const id of characterIds) { const s = seats.get(id); if (s) { s.client.send('system_notice', { type: reason }); s.client.leave(4003, reason); seats.delete(id); } } },
 };
 let onBattle: ((id: string, v: boolean) => void) | undefined;
 export const onBattleChange = (f: typeof onBattle) => { onBattle = f; };

@@ -6,7 +6,7 @@ const HTTP = process.env.HTTP ?? 'http://127.0.0.1:2567/api', WS = process.env.W
 const N = +(process.env.N ?? 10), DURATION = +(process.env.DURATION ?? 30), HZ = 8, SPEED = 110; // px/s (server max 120)
 const post = async (path, body, token, method = 'POST') => { let r; for (;;) { r = await fetch(HTTP + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined }); if (r.status !== 429) break; await new Promise((z) => setTimeout(z, 5000)); } const j = await r.json(); if (!r.ok) throw new Error(path + ' ' + r.status + ' ' + JSON.stringify(j)); return j; };
 const kana = (n) => String.fromCharCode(0x30a2 + (n % 40), 0x30a2 + (Math.floor(n / 40) % 40), 0x30a2 + (Math.floor(n / 1600) % 40));
-const rss = () => { try { const pid = execSync('fuser 2567/tcp 2>/dev/null').toString().trim().split(/\s+/)[0]; return Math.round(+execSync(`ps -o rss= -p ${pid}`).toString() / 1024); } catch { return NaN; } };
+const rss = () => { try { const pid = execSync(`fuser ${new globalThis.URL(HTTP).port || 2567}/tcp 2>/dev/null`).toString().trim().split(/\s+/)[0]; return Math.round(+execSync(`ps -o rss= -p ${pid}`).toString() / 1024); } catch { return NaN; } };
 const bots = [];
 for (let i = 0; i < N; i++) {
   const email = `loadbot${i}@example.com`, password = 'correct-horse-9'; // reused across runs (auth rate limit)

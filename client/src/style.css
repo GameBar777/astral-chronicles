@@ -119,3 +119,20 @@ button:hover{background:#4a5cab} button.secondary{background:#2a2f44}
 table.rk{width:100%;border-collapse:collapse;font-size:14px}table.rk th,table.rk td{padding:4px 6px;border-bottom:1px solid #3a3256;text-align:left}
 table.rk tr.top1 td{color:#ffd76a}table.rk tr.top2 td{color:#dfe6f0}table.rk tr.top3 td{color:#e0a070}
 #social .s-rk.leader{color:#ffd76a}#social .s-rk.officer{color:#9fd0ff}#social button.danger{background:#7a2a2a;color:#fff}
+/* PHASE 10 menu / panels / mobile */
+.mn-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.mn{padding:12px;font-family:inherit;font-size:15px;background:#2a2440;color:#f4ecd8;border:1px solid #8a6a2e;border-radius:6px;cursor:pointer;text-align:left}
+.mn small{float:right;color:#b8a070}.mn:hover{background:#3a3260}
+.cs-row{display:flex;justify-content:space-between;padding:3px 4px;border-bottom:1px solid #2a2a44}.cs-name{font-size:18px;color:#ffe08a;margin-bottom:6px}
+.sk{display:flex;gap:12px;padding:6px;border:1px solid #3a3256;border-radius:4px;margin-bottom:4px}.sk b{color:#ffe08a;min-width:120px}
+.minimap{image-rendering:pixelated;border:2px solid #8a6a2e;display:block;margin:6px auto;max-width:100%}.mp-name{color:#ffe08a}
+.nw{border-bottom:1px solid #3a3256;padding:6px 0}.nw small{margin-left:8px;color:#a9a1c0}.nw p{margin:4px 0 0;white-space:pre-wrap}
+.st{display:flex;align-items:center;gap:10px;margin:8px 0}.st input[type=range]{flex:1}
+#hudbar{pointer-events:auto}#hudbar button{margin-left:6px}
+.c-whisper{color:#ff9ad0}
+.login-news{margin-top:10px;font-size:13px;text-align:left;max-width:420px}.login-news b{color:#ffe08a}.maint{background:#7a2a2a;color:#fff;padding:6px 10px;border-radius:6px;margin-bottom:8px}
+#touch{position:fixed;inset:auto 0 0 0;height:0;pointer-events:none;z-index:30}
+#touch .joy{position:fixed;left:24px;bottom:calc(30vh + 24px);width:120px;height:120px;border-radius:50%;background:#ffffff1a;border:2px solid #ffffff55;pointer-events:auto;touch-action:none}
+#touch .knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:#ffffff66}
+#touch .tb{position:fixed;right:20px;bottom:calc(30vh + 40px);width:70px;height:70px;border-radius:50%;background:#d9b45ecc;color:#1a1208;font:bold 20px "DotGothic16",sans-serif;border:none;pointer-events:auto;touch-action:none}
+#touch .tb.menu{right:100px;bottom:calc(30vh + 10px);width:56px;height:56px;font-size:13px;background:#4a3a7acc;color:#fff}
+@media (max-width: 760px){ .p4{left:4px;right:4px;top:52px;width:auto!important} #chat{width:calc(100vw - 16px)!important;max-height:28vh;left:8px!important} #chat .log{max-height:16vh} #hudbar{top:136px} #hudbar button{font-size:12px;padding:4px 8px} .mn-grid{grid-template-columns:1fr 1fr} }

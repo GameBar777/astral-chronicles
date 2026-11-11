@@ -8,12 +8,22 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 export const CLASS_JA = Object.fromEntries(CLASS_IDS.map((c) => [c, CLASSES[c].name]));
 export function clearUI() { ui.innerHTML = ''; }
 
+/** PHASE 10: maintenance banner + current announcements on the title screen (public endpoints, no auth). */
+async function loginNews() {
+  try {
+    const [st, list] = await Promise.all([api<any>('GET', '/status'), api<any[]>('GET', '/announcements')]);
+    const el = document.getElementById('news'); if (!el) return;
+    el.innerHTML = (st.maintenance ? `<div class="maint" id="maint">メンテナンス中: ${esc(st.message || 'しばらくお待ちください')}</div>` : '')
+      + list.slice(0, 3).map((a) => `<div class="nw"><b>${esc(a.title)}</b><p>${esc(a.body)}</p></div>`).join('');
+  } catch { /* server unreachable: login form shows its own error */ }
+}
 export function showLogin(onReady: (c: CharacterDto) => void, msg = '') {
   h(`<form class="panel" id="f"><h1>ASTRAL CHRONICLES</h1><div class="sub">エルディア大陸 — 開発版</div>
     <label>メールアドレス<input id="email" type="email" autocomplete="username" required></label>
     <label>パスワード（8文字以上）<input id="pw" type="password" autocomplete="current-password" required></label>
     <div class="row"><button id="login" type="submit">ログイン</button><button id="reg" type="button" class="secondary">新規登録</button></div>
-    <div class="err" id="err">${esc(msg)}</div></form>`);
+    <div class="err" id="err">${esc(msg)}</div><div class="login-news" id="news"></div></form>`);
+  loginNews();
   let busy = false;
   const run = async (register: boolean) => {
     if (busy) return; busy = true; $('#err').textContent = '';

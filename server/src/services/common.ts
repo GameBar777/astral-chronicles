@@ -16,7 +16,7 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>, db: pg.Pool = 
 /** Owned, alive character; `lock` takes the row lock that serialises every state change of that character. */
 export async function ownChar(c: pg.PoolClient, userId: string, characterId: unknown, lock = false) {
   if (typeof characterId !== 'string' || !UUID.test(characterId)) throw new HttpError(404, 'character_not_found');
-  const r = await c.query(`SELECT c.id,c.name,c.class,c.level,c.exp,c.gold,c.map_id,c.pos_x,c.pos_y,c.pos_updated_at,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
+  const r = await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,c.exp,c.gold,c.map_id,c.pos_x,c.pos_y,c.pos_updated_at,s.* FROM characters c JOIN character_stats s ON s.character_id=c.id
     WHERE c.id=$1 AND c.user_id=$2 AND c.deleted_at IS NULL ${lock ? 'FOR UPDATE OF c' : ''}`, [characterId, userId]);
   if (!r.rows[0]) throw new HttpError(404, 'character_not_found');
   return r.rows[0];

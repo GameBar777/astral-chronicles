@@ -1,6 +1,9 @@
+import { lookTexture } from '../art/look';
 import Phaser from 'phaser';
 import { SKILLS, BATTLE_ITEMS, STATUS_DEFS, type BattleEvent } from '@astral/shared';
 import { api, errText, type CharacterDto } from '../api';
+import { playBgm, sfx } from '../audio';
+const MAGIC_NAMES = Object.values(SKILLS).filter((s) => s.type === 'magic').map((s) => s.name);
 const FONT = '"DotGothic16", sans-serif';
 export interface BattleView { id: string; zone?: string; turn: number; status: 'active' | 'victory' | 'defeat' | 'fled'; canFlee: boolean; combatants: any[]; log: BattleEvent[];
   events?: BattleEvent[]; rewards?: { exp: number; gold: number; drops: { itemId: string; name: string; qty: number }[] } | null;
@@ -29,6 +32,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.party) { bg.setTint(0x6a5a8a); this.add.rectangle(0, 0, W, H, 0x100818, 0.35).setOrigin(0); } // underground: darkened meadow backdrop (placeholder)
     this.add.rectangle(0, H, W, H * 0.34, 0x000000, 0.25).setOrigin(0, 1);
     const enemies = this.b.combatants.filter((x) => x.side === 'enemy');
+    playBgm(enemies.some((e) => e.monsterId === 'ruins_golem') ? 'boss' : 'battle');
     const groundY = H * 0.62;
     enemies.forEach((e, i) => {
       const n = enemies.length, x = W * (0.2 + (n === 1 ? 0.18 : (0.36 * i) / Math.max(1, n - 1))), y = groundY + (i % 2) * 34 - (n > 1 ? 10 : 0);
@@ -47,7 +51,7 @@ export class BattleScene extends Phaser.Scene {
     ps.forEach((p, i) => { // party: staggered column on the right, own character in front
       const x = ps.length === 1 ? W * 0.76 : W * (0.7 + 0.09 * (i % 2)) , y = ps.length === 1 ? groundY + 30 : groundY - 40 + i * 46, sc = ps.length === 1 ? 2.7 : 2.1;
       this.add.ellipse(x, y - 4, 80, 18, 0x000000, 0.3);
-      const sp = this.add.sprite(x, y, `ch_${p.characterId === this.c.id ? this.c.class : p.cls ?? 'warrior'}`, 1).setOrigin(0.5, 1).setScale(sc).setDepth(y); // left-facing frame
+      const sp = this.add.sprite(x, y, lookTexture(this, p.characterId === this.c.id ? this.c.class : p.cls ?? 'warrior', p.characterId === this.c.id ? this.c.appearance : (p as any).look), 1).setOrigin(0.5, 1).setScale(sc).setDepth(y); // left-facing frame
       this.sprites.set(p.id, sp);
       if (ps.length > 1) { this.add.text(x, y + 2, p.name, { fontFamily: FONT, fontSize: '12px', color: p.characterId === this.c.id ? '#ffe08a' : '#fff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0).setDepth(y + 1).setName('pn_' + p.id); this.bars.set(p.id, this.add.graphics().setDepth(y + 1)); }
     });
@@ -175,6 +179,8 @@ export class BattleScene extends Phaser.Scene {
       this.addLog(ev.text);
       const tgt = ev.target ? this.sprites.get(ev.target) : undefined, act = ev.actor ? this.sprites.get(ev.actor) : undefined;
       if (act && (ev.kind === 'damage' || ev.kind === 'heal')) this.tweens.add({ targets: act, x: act.x + (ev.actor!.startsWith('p') ? -18 : 18), duration: 90, yoyo: true });
+      if (ev.kind === 'damage') sfx(ev.target?.startsWith('p') ? 'hit' : MAGIC_NAMES.some((n) => ev.text.includes(n)) ? 'magic' : 'attack');
+      if (ev.kind === 'heal') sfx('heal');
       if (tgt && ev.kind === 'damage') {
         await wait(110); tgt.setTintFill(0xffffff); this.time.delayedCall(80, () => tgt.clearTint());
         this.tweens.add({ targets: tgt, x: tgt.x + 6, duration: 40, yoyo: true, repeat: 2 });
@@ -204,6 +210,8 @@ export class BattleScene extends Phaser.Scene {
       : r.status === 'victory' && this.party ? '<div class="r-note">報酬は付与済みです</div>'
       : r.status === 'defeat' ? `<div class="r-note">HPが30%の状態で街に戻されます（報酬なし）${this.party ? '<br>ダンジョン攻略は失敗しました' : ''}</div>` : '<div class="r-note">報酬はありません</div>';
     this.menu('');
+    if (r.status === 'victory') playBgm('victory'); else if (r.status === 'defeat') playBgm('defeat');
+    if (r.status === 'victory' && rw?.drops?.length) setTimeout(() => sfx('item'), 900);
     const win = document.createElement('div'); win.className = 'b-result'; win.id = 'b-result';
     win.innerHTML = `<div class="r-title ${r.status}">${title}</div>${body}<button id="b-close">${this.party && r.status !== 'defeat' ? 'ダンジョンに戻る' : 'フィールドに戻る'}</button>`;
     this.ui.appendChild(win);
@@ -214,6 +222,7 @@ export class BattleScene extends Phaser.Scene {
   /** LEVEL UP: light pillar + rising sparkles + bouncing title + stat diff (old → new from server diff). */
   async levelUp(lu: NonNullable<BattleView['levelUp']>, win: HTMLElement) {
     const p = this.sprites.get(this.me().id)!, W = this.scale.width, H = this.scale.height;
+    sfx('levelup');
     const pillar = this.add.graphics().setDepth(40).setBlendMode(Phaser.BlendModes.ADD);
     for (let i = 0; i < 14; i++) pillar.fillStyle(0xfff0a0, 0.06 + i * 0.012).fillRect(p.x - 70 + i * 5, 0, 140 - i * 10, p.y);
     pillar.setScale(1, 0).setY(0); this.tweens.add({ targets: pillar, scaleY: 1, duration: 420, ease: 'Cubic.out' });

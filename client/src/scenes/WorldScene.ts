@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { openMarket, openRanking } from '../market';
+import { lookTexture } from '../art/look';
 import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2, DUNGEONS } from '@astral/shared';
 import asteria from '../../../assets/maps/asteria.json';
 import meadow from '../../../assets/maps/green_meadow.json';
@@ -10,6 +11,9 @@ import { openDialog, openQuests } from '../npcpanels';
 import { Presence } from '../net';
 import { toggleSocial } from '../social';
 import { dungeonBus, confirmBox } from '../dungeonBus';
+import { openMenu, openEntry, type MenuHooks } from '../menu';
+import { touchState } from '../touch';
+import { playBgm, sfx } from '../audio';
 const FACE4: Record<Direction, string> = { s: 'down', n: 'up', w: 'left', nw: 'left', sw: 'left', e: 'right', ne: 'right', se: 'right' };
 const FONT = '"DotGothic16", sans-serif';
 const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
@@ -76,8 +80,8 @@ export class WorldScene extends Phaser.Scene {
     const c = this.character;
     this.pos = c.map_id === this.map.id ? { x: c.pos_x, y: c.pos_y } : { ...this.map.spawn };
     this.lastSent = { ...this.pos }; this.syncT = 0;
-    // NOTE: appearance (hair/skin/body) is not yet reflected by the generated class sheets (KNOWN LIMITATION, see BUG-007)
-    this.player = this.add.sprite(this.pos.x, this.pos.y, `ch_${c.class}`, 0).setOrigin(0.5, 1);
+    // appearance: hair colour / skin / body type recoloured at runtime (BUG-008, art/look.ts)
+    this.player = this.add.sprite(this.pos.x, this.pos.y, lookTexture(this, c.class, c.appearance), 0).setOrigin(0.5, 1);
     this.nameTag = this.add.text(0, 0, c.name, { fontFamily: FONT, fontSize: '12px', color: '#fff', backgroundColor: '#0c1020cc', padding: { x: 4, y: 1 } }).setOrigin(0.5, 1).setDepth(1e6);
     this.cameras.main.setBounds(0, 0, this.map.width * 32, this.map.height * 32).startFollow(this.player, true, 0.15, 0.15).setRoundPixels(true).setZoom(1.5); // close 3/4 framing like the art target
     // PHASE 6: shared map room (other players + server-validated movement)
@@ -91,6 +95,15 @@ export class WorldScene extends Phaser.Scene {
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
     this.input.keyboard!.addKey(K.O).on('down', () => toggleSocial());
+    const hooks: MenuHooks = { char: () => this.character, map: () => ({ data: this.map, x: this.pos.x, y: this.pos.y }),
+      inventory: () => openInventory(this.character, (c) => this.onCharacter(c)), quests: () => openQuests(null, this.character, (c) => this.onCharacter(c)),
+      social: () => toggleSocial(), market: () => openMarket(this.character, (c) => this.onCharacter(c)), ranking: () => openRanking() };
+    const menuKey = (code: number, fn: () => void) => this.input.keyboard!.addKey(code).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) fn(); });
+    menuKey(K.M, () => openMenu(hooks)); menuKey(K.C, () => openEntry('char', hooks)); menuKey(K.K, () => openEntry('skill', hooks)); menuKey(K.N, () => openEntry('map', hooks));
+    const openM = () => { if (!this.inBattle && this.scene.isActive()) openMenu(hooks); };
+    (window as any).__astralMenu = openM; touchState.onMenu = openM; touchState.onAction = () => { if (!panelOpen()) this.interact(); };
+    this.events.once('shutdown', () => { if ((window as any).__astralMenu === openM) (window as any).__astralMenu = null; touchState.onMenu = () => {}; touchState.onAction = () => {}; });
+    playBgm(this.map.id === 'asteria' ? 'town' : 'meadow');
     this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
     this.input.keyboard!.addKey(K.B).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openMarket(this.character, (c) => this.onCharacter(c)); });
     this.input.keyboard!.addKey(K.R).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openRanking(); });
@@ -98,7 +111,7 @@ export class WorldScene extends Phaser.Scene {
     this.keyE.on('down', () => this.interact()); this.keyI.on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openInventory(this.character, (c) => this.onCharacter(c)); });
     this.events.once('shutdown', () => { closePanel(); this.keyE.removeAllListeners(); this.keyI.removeAllListeners(); });
     this.prompt = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#fff4cc', backgroundColor: '#3a2a14ee', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6 + 1).setVisible(false);
-    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  I:持ち物  L:クエスト  O:ソーシャル  B:取引所  R:ランキング`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
+    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  M:メニュー  I:持ち物  L:クエスト  O:ソーシャル  B:取引所  R:ランキング`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
     const place = () => this.hud(info, Math.round(this.scale.width / 2 - info.width / 2), this.scale.height - info.height - 8);
     place(); this.scale.on('resize', place);
     this.events.once('shutdown', () => this.scale.off('resize', place));
@@ -162,6 +175,7 @@ export class WorldScene extends Phaser.Scene {
     });
   }
   async afterBattle(status: string) {
+    playBgm(this.map.id === 'asteria' ? 'town' : 'meadow');
     document.getElementById('chat')?.classList.remove('hidden');
     const fresh = (await api<CharacterDto[]>('GET', '/characters').catch(() => [])).find((x) => x.id === this.character.id);
     if (fresh) { this.character = fresh; this.game.events.emit('character', fresh); }
@@ -233,7 +247,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     try {
-      const r = await api('POST', `/characters/${this.character.id}/gather`, { nodeId: t.node.id, requestId: newRequestId() });
+      const r = await api('POST', `/characters/${this.character.id}/gather`, { nodeId: t.node.id, requestId: newRequestId() }); sfx('item');
       this.tweens.add({ targets: t.node.img, y: t.node.y - 4, yoyo: true, duration: 90, repeat: 2 });
       this.toast(`${r.item.name} ×${r.item.qty} を手に入れた！${r.levelUp ? `（採集Lv${r.level}にアップ）` : ''}`, '#2a6a3add');
       t.node.img.setAlpha(0.45); this.time.delayedCall(r.respawnSec * 1000, () => t.node.img.active && t.node.img.setAlpha(1));
@@ -289,7 +303,8 @@ export class WorldScene extends Phaser.Scene {
     if (this.inBattle) return;
     if (panelOpen()) { this.player.setFrame(SHEET_FRAME[this.facing]); this.prompt.setVisible(false); return; }
     const k = this.keys;
-    const v = inputToVector({ up: k.up.isDown || k.w.isDown, down: k.down.isDown || k.s.isDown, left: k.left.isDown || k.a.isDown, right: k.right.isDown || k.d.isDown });
+    const T = touchState;
+    const v = inputToVector({ up: k.up.isDown || k.w.isDown || T.up, down: k.down.isDown || k.s.isDown || T.down, left: k.left.isDown || k.a.isDown || T.left, right: k.right.isDown || k.d.isDown || T.right });
     const dt = Math.min(dtMs, 100) / 1000;
     this.pos = moveWithCollision(this.map, this.pos, { x: v.x * PLAYER_SPEED * dt, y: v.y * PLAYER_SPEED * dt });
     const dir = vectorToDirection(v); if (dir) this.facing = dir;

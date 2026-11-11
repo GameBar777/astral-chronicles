@@ -23,7 +23,7 @@ export interface Combatant {
   id: string; side: 'player' | 'enemy'; name: string; level: number; monsterId?: string; characterId?: string;
   hp: number; maxHp: number; mp: number; maxMp: number; atk: number; def: number; matk: number; mdef: number; agi: number; luk: number;
   element: string; weakTo?: string[]; statuses: { id: StatusId; turns: number }[]; defending: boolean; guardTurns: number;
-  cls?: string; actions?: EnemyAction[]; skills?: string[]; phases?: BossPhase[]; phase?: number; reward?: { exp: number; gold: number; drops: { itemId: string; rate: number; min: number; max: number }[] };
+  cls?: string; look?: { bodyType?: string; hairStyle?: number; hairColor?: number; skinColor?: number }; actions?: EnemyAction[]; skills?: string[]; phases?: BossPhase[]; phase?: number; reward?: { exp: number; gold: number; drops: { itemId: string; rate: number; min: number; max: number }[] };
 }
 export type Command =
   | { type: 'attack'; target: string } | { type: 'skill'; skillId: string; target?: string }

@@ -18,7 +18,7 @@ async function player(tag, cls, k, opts = {}, look = null) {
   await p.fill('#email', `e10${tag}_${Date.now()}@example.com`); await p.fill('#pw', 'correct-horse-9'); await p.click('#reg');
   await p.waitForSelector('#new'); await p.click('#new'); await p.waitForSelector('#name');
   const name = tag + kana(Date.now() + k * 7); await p.fill('#name', name); await p.check(`input[value=${cls}]`);
-  if (look) { await p.selectOption('#hc', { index: look.hc }); await p.selectOption('#sk', { index: look.sk }); await p.selectOption('#body', look.body); }
+  if (look) { await p.selectOption('#hc', { index: look.hc }); await p.selectOption('#sk', { index: look.sk }); await p.selectOption('#body', look.body); if (look.hs != null) await p.selectOption('#hs', { index: look.hs }); }
   await p.click('#create');
   await p.waitForFunction(() => window.__astral?.scene.isActive('World'), null, { timeout: 15000 });
   const id = (await db.query('SELECT id, user_id FROM characters WHERE name=$1', [name])).rows[0];
@@ -49,11 +49,11 @@ await db.query(`UPDATE server_settings SET value='{"on":false,"message":""}' WHE
 await sleep(2300);
 
 // ---------- 2. appearance + cobble + audio
-const A = await player('甲', 'warrior', 1, {}, { hc: 3, sk: 2, body: 'b' });
+const A = await player('甲', 'warrior', 1, {}, { hc: 3, sk: 2, body: 'b', hs: 1 });
 const B = await player('乙', 'priest', 2);
 const lookKey = await A.p.evaluate(() => window.__astral.scene.getScene('World').player.texture.key);
-ok('own sprite uses recoloured appearance texture', lookKey === 'ch_warrior_h3s2bb', lookKey);
-ok('other player sees A with A\'s appearance', await waitFor(() => B.p.evaluate(() => window.__astral.textures.exists('ch_warrior_h3s2bb'))));
+ok('own sprite uses recoloured appearance texture', lookKey === 'ch_warrior_h3s2bby1', lookKey);
+ok('other player sees A with A\'s appearance', await waitFor(() => B.p.evaluate(() => window.__astral.textures.exists('ch_warrior_h3s2bby1'))));
 await A.p.mouse.click(640, 300); // user gesture -> audio unlock
 ok('town BGM selected in Asteria', await waitFor(() => A.p.evaluate(() => window.__astralAudio.track === 'town')), await A.p.evaluate(() => window.__astralAudio.track));
 await A.p.evaluate(() => { const w = window.__astral.scene.getScene('World'); w.pos.x += 70; });

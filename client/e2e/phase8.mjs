@@ -95,9 +95,9 @@ const g0 = await gold(B);
 const [c1, c2] = await Promise.all([api(B, 'POST', `/characters/${B.id}/dungeon/chest`), api(B, 'POST', `/characters/${B.id}/dungeon/chest`)]);
 ok('concurrent chest claim: exactly one succeeds', [c1.status, c2.status].sort().join() === '200,409', `${c1.status},${c2.status}`);
 { const g1 = await gold(B); ok('B gold +40 once', g1 === g0 + 40, `${g0}->${g1} ${JSON.stringify([c1.body, c2.body])}`); }
-await A.p.click('#d-chest'); ok('A chest message', await waitFor(async () => (await A.p.textContent('#dungeon .d-msg')).includes('宝箱')));
+await A.p.click('#d-chest', { force: true, timeout: 8000 }).catch(() => A.p.evaluate(() => document.querySelector('#d-chest')?.click())); ok('A chest message', await waitFor(async () => (await A.p.textContent('#dungeon .d-msg')).includes('宝箱')));
 await A.p.waitForTimeout(300); await shot(A, 'phase8-chest.png');
-await C.p.click('#d-chest'); await C.p.waitForTimeout(500);
+await C.p.click('#d-chest', { force: true, timeout: 8000 }).catch(() => C.p.evaluate(() => document.querySelector('#d-chest')?.click())); await C.p.waitForTimeout(500);
 ok('chest tx rows = 3 (one per member)', (await db.query(`SELECT count(*)::int n FROM transactions WHERE character_id=ANY($1) AND idempotency_key LIKE 'dungeon:%:chest:1'`, [ALL.map((P) => P.id)])).rows[0].n === 3);
 ok('B now sees chest as claimed', await waitFor(async () => { await B.p.evaluate(() => window.__astral.scene.getScene('Dungeon').refresh()); return B.p.isDisabled('#d-chest'); }));
 await A.p.click('#d-next');

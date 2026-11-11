@@ -54,7 +54,7 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/admin/ban', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminBan(actor(req), req.body?.name, req.body?.ban))));
   r.post('/admin/grant', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminGrant(actor(req), req.body))));
   r.post('/auth/logout', auth, wrap(async (req: Authed, res) => { await logout(req.auth.sessionId); res.status(204).end(); }));
-  r.get('/me', auth, wrap(async (req: Authed, res) => res.json({ userId: req.auth.userId })));
+  r.get('/me', auth, wrap(async (req: Authed, res) => { const { pool } = await import('../db/pool.js'); const email = (await pool.query('SELECT email FROM users WHERE id=$1', [req.auth.userId])).rows[0]?.email; res.json({ userId: req.auth.userId, role: req.auth.role, email }); }));
   r.get('/characters', auth, wrap(async (req: Authed, res) => res.json(await listCharacters(req.auth.userId))));
   r.post('/characters', auth, rateLimit('charcreate', opts.createLimit ?? 10, 60_000), wrap(async (req: Authed, res) => res.status(201).json(await createCharacter(req.auth.userId, req.body))));
   r.get('/characters/:id/inventory', auth, wrap(async (req: Authed, res) => res.json(await listInventory(req.auth.userId, String(req.params.id)))));

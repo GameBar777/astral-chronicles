@@ -138,3 +138,19 @@ describe('PHASE 10 chat gaps: whisper, block, persistent mute', () => {
     c.r.send('chat', { channel: 'local', body: '解除後の発言' }); await until(() => c.box.some((m: any) => m.body === '解除後の発言'));
   });
 });
+describe('GET /me role', () => {
+  it('returns player by default and admin after a DB promotion', async () => {
+    const email = `me_${Date.now()}@example.com`;
+    await call('POST', '/auth/register', { email, password: 'correct-horse-9' });
+    const { token } = (await call('POST', '/auth/login', { email, password: 'correct-horse-9' })).body;
+    const a = await call('GET', '/me', undefined, token);
+    expect(a.status).toBe(200); expect(a.body.role).toBe('player'); expect(a.body.email).toBe(email);
+    const uid = a.body.userId;
+    const { pool } = await import('../src/db/pool.js');
+    await pool.query(`UPDATE users SET role='admin' WHERE id=$1`, [uid]);
+    // role is read from DB on each request (new session still has player until re-resolve)
+    // resolveSession reads users.role every time, so the same token should now be admin
+    const b = await call('GET', '/me', undefined, token);
+    expect(b.body.role).toBe('admin');
+  });
+});

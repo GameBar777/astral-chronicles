@@ -60,7 +60,7 @@ function showCreate(onReady: (c: CharacterDto) => void) {
     <h2>職業</h2><div class="classes">${CLASS_IDS.map((c, i) => `<label class="${i ? '' : 'sel'}"><input type="radio" name="cls" value="${c}" ${i ? '' : 'checked'}>${CLASSES[c].name}<span class="role">${CLASSES[c].role}</span></label>`).join('')}</div>
     <h2>外見</h2><div class="row">
     <label>体型<select id="body"><option value="a">タイプA</option><option value="b">タイプB</option></select></label>
-    <label>髪型<select id="hs">${opts(['', '', '', ''], (i) => `髪型${i + 1}`)}</select></label></div>
+    <label>髪型<select id="hs">${opts(['', '', '', ''], (i) => ['標準','ロング','ポニーテール','ツンツン / 前髪'][i])}</select></label></div>
     <div class="row"><label>髪色<select id="hc">${opts(HAIR, (i) => `髪色${i + 1}`)}</select></label>
     <label>肌色<select id="sk">${opts(SKIN, (i) => `肌色${i + 1}`)}</select></label></div>
     <div class="row"><button type="submit" id="create">作成する</button><button type="button" id="back" class="secondary">戻る</button></div>

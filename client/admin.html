@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>ASTRAL CHRONICLES — 管理画面</title>
+  <style>
+    :root { --bg:#10121c; --card:#1e2744; --line:#d9b45e; --text:#f4ecd8; --muted:#a9a1c0; --danger:#c44; --ok:#6c6; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font-family:"DotGothic16", ui-sans-serif, system-ui, sans-serif; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:2px solid var(--line); background:#0d1224; }
+    h1 { font-size:18px; margin:0; color:#ffe08a; } .role { color:var(--muted); font-size:13px; }
+    nav { display:flex; gap:6px; padding:10px 18px; flex-wrap:wrap; }
+    nav button, .btn { background:#2a2440; color:var(--text); border:1px solid #8a6a2e; border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    nav button.on { background:#3a3260; border-color:var(--line); } .btn.danger { background:#5a1a1a; }
+    main { padding:16px 18px 40px; max-width:960px; }
+    .card { background:linear-gradient(#1e2744ee,#0d1224ee); border:2px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:14px; }
+    label { display:flex; flex-direction:column; gap:4px; margin:8px 0; font-size:13px; color:var(--muted); }
+    input, textarea, select { font:inherit; background:#0d1224; color:var(--text); border:1px solid #8a6a2e; border-radius:4px; padding:6px 8px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { border-bottom:1px solid #2a2a44; padding:6px 4px; text-align:left; vertical-align:top; }
+    .ok { color:var(--ok); } .ng { color:#ff8a8a; } .msg { min-height:1.4em; margin:8px 0; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; } .row label { flex:1; min-width:140px; }
+    #login { max-width:420px; margin:40px auto; }
+  </style>
+</head>
+<body>
+  <div id="login" class="card" hidden>
+    <h1>管理画面ログイン</h1>
+    <p class="role">ゲームと同じアカウントで入ります。GM / 管理者のみ利用できます。</p>
+    <label>メール<input id="email" type="email" autocomplete="username"/></label>
+    <label>パスワード<input id="pw" type="password" autocomplete="current-password"/></label>
+    <button class="btn" id="login-btn" type="button">ログイン</button>
+    <div class="msg ng" id="login-msg"></div>
+  </div>
+  <div id="app" hidden>
+    <header>
+      <h1>ASTRAL CHRONICLES 管理画面</h1>
+      <div><span class="role" id="who"></span> <button class="btn" id="out" type="button">ログアウト</button></div>
+    </header>
+    <nav id="tabs">
+      <button data-t="status" class="on">状態 / メンテナンス</button>
+      <button data-t="news">お知らせ</button>
+      <button data-t="mod">発言制限 / BAN</button>
+      <button data-t="grant" id="tab-grant">補填付与</button>
+      <button data-t="logs">監査ログ</button>
+    </nav>
+    <main>
+      <section data-p="status" class="card">
+        <div id="st-body">読み込み中…</div>
+        <div class="row">
+          <label>メッセージ<input id="mnt-msg" maxlength="200" placeholder="メンテナンスのお知らせ文"/></label>
+          <button class="btn" id="mnt-on" type="button">メンテナンス開始</button>
+          <button class="btn" id="mnt-off" type="button">解除</button>
+        </div>
+        <div class="msg" id="st-msg"></div>
+      </section>
+      <section data-p="news" class="card" hidden>
+        <h2>現在のお知らせ</h2>
+        <div id="news-list"></div>
+        <h2>新規作成（GM）</h2>
+        <label>タイトル<input id="nw-title" maxlength="60"/></label>
+        <label>本文<textarea id="nw-body" rows="4" maxlength="1000"></textarea></label>
+        <label>掲載時間（時間、空欄は無期限）<input id="nw-hours" type="number" min="1" max="2160"/></label>
+        <button class="btn" id="nw-add" type="button">掲載する</button>
+        <div class="msg" id="nw-msg"></div>
+      </section>
+      <section data-p="mod" class="card" hidden>
+        <h2>発言制限（GM）</h2>
+        <div class="row">
+          <label>キャラクター名<input id="mu-name"/></label>
+          <label>分数（0で解除）<input id="mu-min" type="number" value="30" min="0" max="43200"/></label>
+          <button class="btn" id="mu-go" type="button">実行</button>
+        </div>
+        <h2>アカウント停止（管理者）</h2>
+        <div class="row">
+          <label>キャラクター名<input id="ba-name"/></label>
+          <button class="btn danger" id="ba-on" type="button">BAN</button>
+          <button class="btn" id="ba-off" type="button">解除</button>
+        </div>
+        <div class="msg" id="mod-msg"></div>
+      </section>
+      <section data-p="grant" class="card" hidden>
+        <h2>アイテム補填（管理者、grantId で冪等）</h2>
+        <div class="row">
+          <label>キャラクター名<input id="gr-name"/></label>
+          <label>アイテムID<input id="gr-item" placeholder="potion_small"/></label>
+          <label>数量<input id="gr-qty" type="number" value="1" min="1" max="99"/></label>
+          <label>grantId（再送防止）<input id="gr-id" placeholder="comp-2026-001"/></label>
+          <button class="btn" id="gr-go" type="button">付与</button>
+        </div>
+        <div class="msg" id="gr-msg"></div>
+      </section>
+      <section data-p="logs" class="card" hidden>
+        <div class="row">
+          <label>フィルタ（action 前方一致）<input id="lg-q" placeholder="admin."/></label>
+          <button class="btn" id="lg-go" type="button">再読込</button>
+        </div>
+        <div id="lg-body">読み込み中…</div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="/src/admin.ts"></script>
+</body>
+</html>

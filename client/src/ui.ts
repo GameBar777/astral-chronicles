@@ -17,11 +17,25 @@ async function loginNews() {
       + list.slice(0, 3).map((a) => `<div class="nw"><b>${esc(a.title)}</b><p>${esc(a.body)}</p></div>`).join('');
   } catch { /* server unreachable: login form shows its own error */ }
 }
+async function forgotFlow(onReady: (c: CharacterDto) => void) {
+  const email = prompt('登録したメールアドレスを入力してください');
+  if (!email) return;
+  try {
+    await api('POST', '/auth/forgot', { email });
+    const token = prompt('メールに記載の再設定コードを入力してください（開発環境ではサーバの mailbox を参照）');
+    if (!token) return;
+    const pw = prompt('新しいパスワード（8文字以上）');
+    if (!pw) return;
+    await api('POST', '/auth/reset', { token, password: pw });
+    alert('パスワードを更新しました。新しいパスワードでログインしてください');
+  } catch (e) { alert(errText(e)); }
+}
 export function showLogin(onReady: (c: CharacterDto) => void, msg = '') {
   h(`<form class="panel" id="f"><h1>ASTRAL CHRONICLES</h1><div class="sub">エルディア大陸 — 開発版</div>
     <label>メールアドレス<input id="email" type="email" autocomplete="username" required></label>
     <label>パスワード（8文字以上）<input id="pw" type="password" autocomplete="current-password" required></label>
     <div class="row"><button id="login" type="submit">ログイン</button><button id="reg" type="button" class="secondary">新規登録</button></div>
+    <div class="row"><button id="forgot" type="button" class="secondary">パスワードを忘れた</button></div>
     <div class="err" id="err">${esc(msg)}</div><div class="login-news" id="news"></div></form>`);
   loginNews();
   let busy = false;
@@ -36,6 +50,7 @@ export function showLogin(onReady: (c: CharacterDto) => void, msg = '') {
   };
   $('#f').onsubmit = (e) => { e.preventDefault(); run(false); };
   $('#reg').onclick = () => run(true);
+  $('#forgot').onclick = () => forgotFlow(onReady);
 }
 
 export async function showCharacterSelect(onReady: (c: CharacterDto) => void) {

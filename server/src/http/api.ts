@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { CLASSES, expTable } from '@astral/shared';
-import { HttpError, login, logout, register, resolveSession } from '../services/auth.js';
+import { HttpError, login, logout, register, resolveSession, confirmEmail, forgotPassword, resetPassword } from '../services/auth.js';
+import { listMail } from '../services/mail.js';
 import { createCharacter, listCharacters } from '../services/characters.js';
 import { act, activeBattle, listInventory, startBattle } from '../services/battle.js';
 import { listItems, equip, unequip, useItem } from '../services/inventory.js';
@@ -54,6 +55,10 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/admin/ban', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminBan(actor(req), req.body?.name, req.body?.ban))));
   r.post('/admin/grant', auth, admRl, wrap(async (req: Authed, res) => res.json(await O.adminGrant(actor(req), req.body))));
   r.post('/auth/logout', auth, wrap(async (req: Authed, res) => { await logout(req.auth.sessionId); res.status(204).end(); }));
+  r.post('/auth/confirm', rateLimit('auth', opts.authLimit ?? 20, 60_000), wrap(async (req, res) => res.json(await confirmEmail(req.body?.token))));
+  r.post('/auth/forgot', rateLimit('auth', opts.authLimit ?? 20, 60_000), wrap(async (req, res) => res.json(await forgotPassword(req.body?.email))));
+  r.post('/auth/reset', rateLimit('auth', opts.authLimit ?? 20, 60_000), wrap(async (req, res) => res.json(await resetPassword(req.body?.token, req.body?.password))));
+  if (process.env.NODE_ENV !== 'production') r.get('/dev/mailbox', wrap(async (req, res) => res.json(listMail(typeof req.query.to === 'string' ? req.query.to : undefined))));
   r.get('/me', auth, wrap(async (req: Authed, res) => { const { pool } = await import('../db/pool.js'); const email = (await pool.query('SELECT email FROM users WHERE id=$1', [req.auth.userId])).rows[0]?.email; res.json({ userId: req.auth.userId, role: req.auth.role, email }); }));
   r.get('/characters', auth, wrap(async (req: Authed, res) => res.json(await listCharacters(req.auth.userId))));
   r.post('/characters', auth, rateLimit('charcreate', opts.createLimit ?? 10, 60_000), wrap(async (req: Authed, res) => res.status(201).json(await createCharacter(req.auth.userId, req.body))));

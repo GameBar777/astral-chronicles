@@ -38,7 +38,8 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 `scripts/db-backup.sh` → `backups/*.dump`。復旧: `pg_restore -h 127.0.0.1 -p 5433 -U astral -d astral --clean <file>`
 
 ## デプロイ
-未整備（PHASE 10）。本番環境の分離、TLS(wss)終端、Dockerfile は未作成。
+`docs/DEPLOY.md` 参照（本番ビルド・同一オリジン配信・管理者設定・管理API）。Dockerfile / docker-compose.yml は**未検証**（箱に Docker 無し）。
+本番ビルド確認: `npm run build` → `NODE_ENV=production DATABASE_URL=<既定以外のパスワード> node server/dist/index.js` → `cd client && E2E_URL=http://127.0.0.1:2567/ node e2e/prod-smoke.mjs`
 
 ## API（PHASE 2）
 `GET /api/classes` `GET /api/exp-table` `POST /api/auth/register|login` `POST /api/auth/logout`※ `GET /api/me`※ `GET|POST /api/characters`※（※ `Authorization: Bearer <token>`）
@@ -61,3 +62,10 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 
 ## PHASE 9
 取引所 [B]（アステリア内）、ランキング [R]、ギルド管理はソーシャル [O]。E2E: `cd client && node e2e/phase9.mjs`（約1分。ランキングのキャッシュ待ち31秒を含む）
+
+## PHASE 10
+- 操作: M=メニュー（キャラクター/装備・持ち物/スキル/クエスト/マップ/ソーシャル/取引所/ランキング/お知らせ/設定）、C=キャラクター、K=スキル、N=マップ、チャット `/w 名前 本文` でささやき
+- スマホ（タッチ端末）: 仮想ジョイスティック・E ボタン・MENU ボタン
+- 管理者: `UPDATE users SET role='admin' WHERE email='...'` → `/api/admin/*`（docs/DEPLOY.md）
+- E2E: `cd client && node e2e/phase10.mjs`（3ブラウザ、約3分）。負荷試験: docs/LOAD_TEST.md
+

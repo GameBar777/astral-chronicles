@@ -1,5 +1,5 @@
 # DEVELOPMENT STATUS（更新: 2026-11-12 JST）
-現在の段階: **PHASE 0・1・2 完了 + アート刷新（AI生成オリジナルスプライト）適用済** → PHASE 3 は未着手（コード無し）
+現在の段階: **PHASE 0〜10 完了（各フェーズの未実装項目は各節に明記）**。以下の冒頭表・「未実装」節は PHASE 2 時点の記録で、後続フェーズの節が最新
 
 ## 実装済み（テスト通過済みのもののみ）
 | 機能 | 検証 |
@@ -102,3 +102,18 @@
 - テスト: shared 57 / server 82（phase9-economy 9件）全通過、E2E phase9 24/24（2ブラウザ、UIで出品→検索→購入、履歴、取消、ギルド役職/譲渡/解散、ランキング）、phase7 27/27 回帰
 - スクショ: docs/screenshots/phase9-market-sell.png / phase9-market-browse.png / phase9-market-confirm.png / phase9-market-bought.png / phase9-market-history.png / phase9-guild-roles.png / phase9-ranking.png
 - 未実装（隠さず）: 装備の修理（耐久度の仕組みが無い）、ギルドレベル/ギルド倉庫、市場の価格履歴グラフ、取引所NPCの配置（キー操作で開く）
+
+## PHASE 10 UI・サウンド・セキュリティ・負荷試験・公開準備（2026-11-12）完了（テスト通過）
+- メニュー [M]／HUD「メニュー」ボタン: キャラクター（全ステータス）・装備/持ち物・スキル（職業スキル詳細）・クエスト・マップ（ミニマップ: 自分/NPC/出入口/ダンジョン）・フレンド/パーティー/ギルド・取引所・ランキング・お知らせ・設定。C/K/N の直接キー
+- 設定: BGM/効果音の音量、全ミュート（端末に保存）。サウンド: WebAudio 合成のオリジナルBGM（タイトル/街/草原/通常戦闘/ボス/ダンジョン/勝利/全滅）と効果音（攻撃/魔法/被弾/回復/レベルアップ/アイテム/強化/ボタン）（TD-018）
+- チャット: ウィスパー `/w 名前 本文`（[ささやき] 表示、オフライン/存在しない/ブロック時は日本語エラー）、ブロック/解除（ソーシャルパネル、ブロック中一覧）、発言制限の永続化（chat_mutes、再起動後も有効、制限中表示）
+- 運用: メンテナンスモード（一般ユーザーのAPI/ログイン/入室を拒否、スタッフ可、オンライン全員に通知、タイトル画面にバナー）、お知らせ（タイトル画面・メニュー・作成時に全員通知）、監査ログ（ログイン成功/失敗・管理操作）、管理API（status/logs/maintenance/announcements/mute/ban/grant、ロールは DB のみ）
+- セキュリティ: CSP 等のヘッダ、本番 HSTS、API no-store、WS メッセージ上限・Origin 検査、既定DBパスワードでの本番起動拒否、SQLインジェクション/不正JSON/巨大ボディ/権限昇格のテスト
+- 外見反映（BUG-008 一部）: 髪色・肌色・体型を自分/他プレイヤー/戦闘/ダンジョンで反映。石畳のシームレス化（BUG-009）、BUG-019 修正確認
+- スマホ: タッチ端末で仮想ジョイスティック（8方向）・E・MENU ボタン、狭い画面用のレイアウト。パネル/戦闘中はパッドを隠す
+- 負荷試験: 1プロセスで 50 / 100 同時接続、遅延 p99 64ms / 67ms、取りこぼし・補正・エラー 0（docs/LOAD_TEST.md）
+- 公開準備: .env.example 更新、docs/DEPLOY.md、Dockerfile / docker-compose.yml（**未検証**）、本番ビルドの同一オリジン配信を prod-smoke E2E で確認
+- テスト: shared 57/57、server 96/96（phase10-security-ops 14件）、E2E phase10 34/34、prod-smoke 3/3、回帰 E2E_RESULTS_PLACEHOLDER
+- スクショ: docs/screenshots/phase10-title-maintenance / appearance / cobble / menu / map / settings / whisper / block / maintenance-notice / mobile / mobile-menu / production-build（.png）
+- 未実装・制約（隠さず）: 髪型の反映、魔法使いの髪色、管理画面UI（APIのみ）、Docker/実ホスティング/TLS は未検証（費用・アカウントが必要なため未実施）、混合負荷・複数プロセス構成は未試験、サウンドの音質は人の耳で未確認、パスワード再設定/メール確認は未実装
+

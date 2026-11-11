@@ -117,7 +117,8 @@ describe('PHASE 8 instance dungeon', () => {
     await wait(900); await sweepDungeons();
     await until(() => ba.battle.some((m: any) => m.id === id && m.turn === 2));
     const st = (await pool.query('SELECT state FROM battle_logs WHERE id=$1', [id])).rows[0].state;
-    expect(st.log.some((l: any) => l.turn === 1 && l.actor === 'p1' && l.kind === 'defend')).toBe(true);
+    const pb = st.combatants.find((x: any) => x.characterId === Bu.id).id;
+    expect(st.log.some((l: any) => l.turn === 1 && l.actor === pb && l.kind === 'defend')).toBe(true);
     // B disconnects (leaves the instance room): A's command resolves immediately
     await rb.leave(true); await wait(200);
     const r = await call('POST', `/battles/${id}/action`, { turn: 2, command: { type: 'attack', target: e } }, A.t);
@@ -148,6 +149,12 @@ describe('PHASE 8 instance dungeon', () => {
     expect((await S(A, 'dungeon/leave')).body.ok).toBe(true); expect(await D(A)).toBeNull();
     expect((await D(Bu)).leader).toBe(Bu.id);
     expect((await S(Bu, 'dungeon/leave')).body.status).toBe('cleared');
+    // re-entry condition: a character who just cleared waits reentryCooldownMin before entering again
+    await toEntrance(A.id);
+    expect((await S(A, 'dungeon/enter', { dungeonId: 'ancient_ruins' })).body.error).toBe('reentry_cooldown');
+    await pool.query(`UPDATE dungeon_instances SET ended_at=now()-interval '11 minutes' WHERE id=$1`, [inst]);
+    const ok2 = await S(A, 'dungeon/enter', { dungeonId: 'ancient_ruins' }); expect(ok2.status).toBe(201);
+    await S(A, 'dungeon/leave'); await S(Bu, 'dungeon/leave');
   });
   it('defeat: whole party returns to town at 30% HP and the instance fails', async () => {
     await pool.query('UPDATE character_stats SET hp=1, max_hp=100, def=0, atk=1 WHERE character_id=$1', [C.id]);

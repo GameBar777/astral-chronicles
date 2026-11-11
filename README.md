@@ -52,3 +52,9 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 - `GET|POST gathering|gather` / `GET /api/recipes` / `GET|POST crafting|craft` / `POST craft/:jobId/claim` / `POST enhance`
 - 変更系は `requestId`（8〜64文字英数-）必須で冪等。E2E: `cd client && node e2e/phase4.mjs`
 - 操作: I=持ち物/装備、E=話す/採集（鍛冶屋で製作・強化）
+
+## 箱（開発環境）リセット後の復旧
+`bash scripts/bootstrap-env.sh && npm run db:start`（node_modules・PostgreSQLバイナリ `/workspace/.tools/astral-pg`・PGの空ディレクトリを再作成）
+
+## PHASE 8
+草原の東側「古代遺跡の入口」で E → 入場。E2E: `cd client && node e2e/phase8.mjs`（3ブラウザ、約4分）

@@ -207,8 +207,9 @@ export class BattleScene extends Phaser.Scene {
     const win = document.createElement('div'); win.className = 'b-result'; win.id = 'b-result';
     win.innerHTML = `<div class="r-title ${r.status}">${title}</div>${body}<button id="b-close">${this.party && r.status !== 'defeat' ? 'ダンジョンに戻る' : 'フィールドに戻る'}</button>`;
     this.ui.appendChild(win);
-    if (r.levelUp) await this.levelUp(r.levelUp, win);
+    // bind first: the level-up effect below awaits, and a click during it must not be lost (BUG-020)
     (win.querySelector('#b-close') as HTMLButtonElement).onclick = () => { this.cameras.main.fadeOut(220); this.time.delayedCall(230, () => { this.done({ status: r.status, levelUp: r.levelUp }); this.scene.stop(); }); };
+    if (r.levelUp) await this.levelUp(r.levelUp, win);
   }
   /** LEVEL UP: light pillar + rising sparkles + bouncing title + stat diff (old → new from server diff). */
   async levelUp(lu: NonNullable<BattleView['levelUp']>, win: HTMLElement) {

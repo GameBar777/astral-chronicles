@@ -1,4 +1,4 @@
-# DEVELOPMENT STATUS（更新: 2026-10-31 JST）
+# DEVELOPMENT STATUS（更新: 2026-11-12 JST）
 現在の段階: **PHASE 0・1・2 完了 + アート刷新（AI生成オリジナルスプライト）適用済** → PHASE 3 は未着手（コード無し）
 
 ## 実装済み（テスト通過済みのもののみ）
@@ -78,3 +78,16 @@
 - テスト: server 63/63（phase7-social 8件追加）、E2E phase7 27/27（3ブラウザ同時）、回帰 phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11
 - スクショ: docs/screenshots/phase7-chat-local.png / phase7-party.png / phase7-friends.png / phase7-chat-guild.png / phase7-chat-spam.png / phase7-in-battle.png
 - 未実装: ギルドの役職変更・解散UI、フレンドのブロック、ウィスパー、ミュート状態の永続化（再起動で解除）、PHASE 8 は未着手
+
+## PHASE 8 ダンジョン・ボス・協力プレイ（2026-11-12）完了（テスト通過）
+- インスタンスダンジョン「古代地下遺跡」（全3階: 地下1階/地下2階/最深部）。草原の入口で E → 入場確認（推奨Lv5・入場条件Lv1以上・制限時間60分・最大4人・クリア後10分再入場不可を表示）
+- 入場: ソロ or パーティー（リーダーのみ）。同マップ・オンライン・戦闘中でないメンバーを一括入場し、他メンバーの画面もプッシュで自動遷移。1キャラ1インスタンス（DB部分ユニーク索引）
+- 階層: 各階の魔物を倒すと宝箱と階段が解放。階段はリーダーのみ、移動は全員に同期。制限時間切れはサーバーのスイープで閉鎖・全員解放
+- パーティー戦闘: 全員のコマンドが揃うとターン解決、未提出は20秒で防御扱い、切断者はターンを止めない。再接続で進行中の戦闘に復帰。アイテムは各自の所持品から消費
+- ボス「遺跡の守護者ゴーレム」: 固有行動（岩石落とし=全体攻撃 等）＋HP60%/25%でフェーズ2・3（攻撃力上昇/防御低下・行動表変更）。逃走不可。フェーズ表はクライアントに送らない
+- 報酬: 戦闘報酬・宝箱・クリア報酬をメンバー全員が個別に受取。二重受取は条件付き更新＋transactions一意キーで防止（並列リクエストでも1回のみ）
+- 全滅: 全員HP30%で街へ、インスタンスは失敗
+- 修正: BUG-020（レベルアップ演出中に「戻る」を押すと無反応）
+- テスト: shared 57 / server 73（phase8-dungeon 10件）全通過、E2E phase8 36/36（3ブラウザ同時・切断/再接続含む）、回帰 phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27
+- スクショ: docs/screenshots/phase8-*.png（entrance, entry-confirm, dungeon-f1, party-battle-wait, party-battle-3players, party-victory, chest, floor2-after, boss-floor, boss-battle, boss-phase, reconnect-battle, boss-victory, clear-reward, back-world）
+- 制約（隠さず）: ダンジョンは5種中「古代地下遺跡」1種のみ。ダンジョン内は1画面の部屋表示で歩行移動なし（パネル操作）。戦闘背景は草原画像を流用、ボスはゴブリン画像の流用（専用アート未作成）。E2E はテスト用にステータスをDBで増強（バランス検証ではない）

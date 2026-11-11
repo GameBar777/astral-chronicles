@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2 } from '@astral/shared';
+import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2, DUNGEONS } from '@astral/shared';
 import asteria from '../../../assets/maps/asteria.json';
 import meadow from '../../../assets/maps/green_meadow.json';
 import { api, errText, session, type CharacterDto } from '../api';
@@ -113,7 +113,8 @@ export class WorldScene extends Phaser.Scene {
   }
   goDungeon() { if (!this.scene.isActive()) return; this.inBattle = true; this.cameras.main.fadeOut(300, 0, 0, 0); this.time.delayedCall(320, () => this.scene.start('Dungeon', { character: this.character })); }
   async enterDungeon(o: { props?: Record<string, unknown>; label?: string }) {
-    const ok = await confirmBox(`${o.label ?? 'ダンジョン'}に入場しますか？<br><small>パーティーのリーダーが入場すると、このマップにいるオンラインのメンバー全員が一緒に入ります。</small>`, '入場する');
+    const dd = DUNGEONS.ancient_ruins;
+    const ok = await confirmBox(`${o.label ?? 'ダンジョン'}に入場しますか？<br><small>推奨Lv.${dd.recommendedLevel}／入場条件 Lv.${dd.minLevel}以上／制限時間${dd.ttlMin}分／全${dd.floors.length}階／最大${dd.maxParty}人／クリア後${dd.reentryCooldownMin}分は再入場不可</small><br><small>パーティーのリーダーが入場すると、このマップにいるオンラインのメンバー全員が一緒に入ります。</small>`, '入場する');
     if (!ok) return;
     try { await api('POST', `/characters/${this.character.id}/dungeon/enter`, { dungeonId: o.props?.dungeonId }); this.goDungeon(); }
     catch (e) { this.toast(errText(e)); }

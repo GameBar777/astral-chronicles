@@ -73,7 +73,7 @@ async function fight(label, during) {
   }
   return { n, waitingSeen, ms: Date.now() - t0 };
 }
-async function closeAll() { for (const P of ALL) { if (P.away) continue; await P.p.waitForSelector('#b-close', { timeout: 15000 }).catch(() => {}); await P.p.click('#b-close').catch(() => {}); } await A.p.waitForTimeout(800); }
+async function closeAll() { for (const P of ALL) { if (P.away) continue; await P.p.waitForSelector('#b-close', { timeout: 15000 }).catch(() => {}); await P.p.click('#b-close').catch(() => {}); } await waitFor(async () => (await Promise.all(ALL.filter((P) => !P.away).map((P) => active(P, 'Battle')))).every((x) => !x), 8000); await A.p.waitForTimeout(800); }
 
 // F1
 await db.query(`UPDATE character_stats SET max_hp=800,hp=800,max_mp=80,mp=80,atk=48,def=45,matk=40 WHERE character_id = ANY($1)`, [ALL.map((P) => P.id)]);
@@ -103,7 +103,7 @@ ok('B now sees chest as claimed', await waitFor(async () => { await B.p.evaluate
 await A.p.click('#d-next');
 ok('all on floor 2', await waitFor(async () => (await Promise.all(ALL.map((P) => P.p.textContent('#dungeon .d-floor')))).every((t) => t.includes('2/3'))));
 
-// F2 with a disconnect: C drops mid-battle, party keeps going, C comes back into the same battle
+// F2 (the disconnect/reconnect check runs during the boss fight below)
 await A.p.click('#d-battle');
 await waitFor(async () => (await Promise.all(ALL.map((P) => active(P, 'Battle')))).every(Boolean));
 const f2 = await fight('F2');

@@ -66,16 +66,20 @@ export async function enterDungeon(userId: string, characterId: string, dungeonI
     const ent = MAPS[def.entryMap].objects.find((o) => o.id === def.entrance)!;
     if (Math.hypot(me.pos_x - ent.x, me.pos_y - ent.y) > 112) throw new HttpError(409, 'too_far');
     if (me.hp <= 0) throw new HttpError(409, 'character_down');
+    if (me.level < def.minLevel) throw new HttpError(409, 'level_too_low');
+    const cool = async (id: string) => (await c.query(`SELECT 1 FROM dungeon_members m JOIN dungeon_instances i ON i.id=m.instance_id
+      WHERE m.character_id=$1 AND i.dungeon_id=$2 AND i.status='cleared' AND i.ended_at > now() - ($3||' minutes')::interval LIMIT 1`, [id, def.id, String(def.reentryCooldownMin)])).rowCount;
+    if (await cool(me.id)) throw new HttpError(409, 'reentry_cooldown');
     const party = await partyOf(c, me.id, true);
     if (party && party.leader !== me.id) throw new HttpError(409, 'not_leader');
     const cand = party ? await partyMemberIds(c, party.id) : [me.id];
     for (const id of cand) {
-      const r = (await c.query(`SELECT c.name,c.map_id,s.hp,
+      const r = (await c.query(`SELECT c.name,c.map_id,c.level,s.hp,
         EXISTS(SELECT 1 FROM battle_logs b WHERE b.result IS NULL AND (b.character_id=c.id OR b.participants @> ARRAY[c.id])) busy,
         EXISTS(SELECT 1 FROM dungeon_members m WHERE m.character_id=c.id AND m.left_at IS NULL) inside
         FROM characters c JOIN character_stats s ON s.character_id=c.id WHERE c.id=$1 FOR UPDATE OF c`, [id])).rows[0];
       if (id === me.id) { if (r.busy) throw new HttpError(409, 'in_battle'); ids.push(id); continue; }
-      if (r && r.map_id === def.entryMap && r.hp > 0 && !r.busy && !r.inside && hub.online(id)) ids.push(id); else if (r) skipped.push(r.name);
+      if (r && r.map_id === def.entryMap && r.hp > 0 && r.level >= def.minLevel && !r.busy && !r.inside && hub.online(id) && !(await cool(id))) ids.push(id); else if (r) skipped.push(r.name);
     }
     ids = ids.slice(0, def.maxParty);
     const inst = (await c.query(`INSERT INTO dungeon_instances(dungeon_id,party_id,status,expires_at,leader_character_id,state) VALUES($1,$2,'active',now()+($3||' minutes')::interval,$4,'{"gates":{}}') RETURNING *`,

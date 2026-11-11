@@ -2,13 +2,12 @@ import Phaser from 'phaser';
 import { openMarket, openRanking } from '../market';
 import { lookTexture } from '../art/look';
 import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2, DUNGEONS } from '@astral/shared';
-import asteria from '../../../assets/maps/asteria.json';
-import meadow from '../../../assets/maps/green_meadow.json';
 import { api, errText, session, type CharacterDto } from '../api';
 import type { BattleView } from './BattleScene';
 import { openInventory, closePanel, panelOpen, newRequestId } from '../panels';
 import { openDialog, openQuests } from '../npcpanels';
 import { Presence } from '../net';
+import { MAPS } from '../maps';
 import { toggleSocial } from '../social';
 import { dungeonBus, confirmBox } from '../dungeonBus';
 import { openMenu, openEntry, type MenuHooks } from '../menu';
@@ -16,7 +15,6 @@ import { touchState } from '../touch';
 import { playBgm, sfx } from '../audio';
 const FACE4: Record<Direction, string> = { s: 'down', n: 'up', w: 'left', nw: 'left', sw: 'left', e: 'right', ne: 'right', se: 'right' };
 const FONT = '"DotGothic16", sans-serif';
-const MAPS: Record<string, MapData> = { asteria: asteria as unknown as MapData, green_meadow: meadow as unknown as MapData };
 interface Symbol { s: Phaser.GameObjects.Image; sh: Phaser.GameObjects.Ellipse; id: string; pos: Vec2; v: Vec2; t: number }
 /** char sheet frames: 0 front, 1 left-facing, 2 right-facing, 3 back (idle); 4+2*dir..5+2*dir = walk A/B (scripts/gen-walk-frames.py) */
 const SHEET_FRAME: Record<Direction, number> = { s: 0, n: 3, w: 1, nw: 1, sw: 1, e: 2, ne: 2, se: 2 };

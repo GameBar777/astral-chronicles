@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { DUNGEONS, resolveTurn, type BattleState, type Command, type Combatant } from '@astral/shared';
+import { DUNGEONS, resolveTurn, isBlocked, PLAYER_SPEED, type BattleState, type Command, type Combatant } from '@astral/shared';
 import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
 import { tx, ownChar, UUID } from './common.js';
@@ -8,6 +8,8 @@ import { hub } from '../rooms/hub.js';
 import { partyOf, partyMemberIds, addGuildExp } from './social.js';
 import { addItem, battleRng, consumeItem, fixedMonsters, grantBattleReward, grantGoldExp, inventoryCounts, playerCombatant, view } from './battle.js';
 import { wearEquipment } from './inventory.js';
+import { SPEED_TOLERANCE, SLACK_PX, MAX_DT_SEC } from './world.js';
+import { snapDungeonFloor } from '../rooms/dungeonSync.js';
 /**
  * PHASE 8 instance dungeon (TD-016). One dungeon_instances row per run; membership in dungeon_members (one active per character).
  * Party battles: every member submits a command; the turn resolves when all living members have submitted, when the
@@ -16,7 +18,6 @@ import { wearEquipment } from './inventory.js';
 const DBG = process.env.DUNGEON_DEBUG === '1';
 export const dlog = (...a: unknown[]) => { if (DBG) console.log('[dungeon]', new Date().toISOString().slice(11, 23), ...a); };
 export const turnMs = () => Number(process.env.DUNGEON_TURN_MS ?? 20_000);
-const ZONE = 'ancient_ruins';
 
 async function instanceOf(c: pg.PoolClient, characterId: string, lock = false) {
   const r = await c.query(`SELECT i.* FROM dungeon_members m JOIN dungeon_instances i ON i.id=m.instance_id WHERE m.character_id=$1 AND m.left_at IS NULL ${lock ? 'FOR UPDATE OF i' : ''}`, [characterId]);
@@ -25,9 +26,20 @@ async function instanceOf(c: pg.PoolClient, characterId: string, lock = false) {
   return inst;
 }
 async function members(c: pg.PoolClient, instId: string) {
-  return (await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,s.hp,s.max_hp,s.mp,s.max_mp,m.left_at FROM dungeon_members m JOIN characters c ON c.id=m.character_id
+  return (await c.query(`SELECT c.id,c.name,c.class,c.appearance,c.level,s.hp,s.max_hp,s.mp,s.max_mp,m.left_at,m.pos_x,m.pos_y FROM dungeon_members m JOIN characters c ON c.id=m.character_id
     JOIN character_stats s ON s.character_id=c.id WHERE m.instance_id=$1 ORDER BY m.joined_at, c.id`, [instId])).rows;
 }
+export function floorMap(dungeonId: string, floor: number) {
+  const id = DUNGEONS[dungeonId]?.floors[floor - 1]?.mapId; const map = id ? MAPS[id] : undefined;
+  if (!map) throw new HttpError(500, 'dungeon_map_missing');
+  return map;
+}
+async function placeAll(c: pg.PoolClient, inst: any, floor: number) {
+  const map = floorMap(inst.dungeon_id, floor); const x = Math.round(map.spawn.x), y = Math.round(map.spawn.y);
+  await c.query('UPDATE dungeon_members SET pos_x=$2, pos_y=$3, pos_updated_at=now() WHERE instance_id=$1 AND left_at IS NULL', [inst.id, x, y]);
+  return { mapId: map.id, x, y };
+}
+
 const activeBattleRow = async (c: pg.PoolClient, instId: string, lock = false) =>
   (await c.query(`SELECT * FROM battle_logs WHERE dungeon_instance_id=$1 AND result IS NULL ${lock ? 'FOR UPDATE' : ''}`, [instId])).rows[0];
 /** ends the run: open battle aborted, everyone still inside is marked as left */
@@ -40,14 +52,15 @@ async function endInstance(c: pg.PoolClient, instId: string, status: 'failed' | 
 }
 async function dview(c: pg.PoolClient, inst: any, me: string) {
   const def = DUNGEONS[inst.dungeon_id], fl = def.floors[inst.current_floor - 1], st = inst.state ?? {}, cl = inst.rewards_claimed ?? {};
-  const b = await activeBattleRow(c, inst.id);
+  const b = await activeBattleRow(c, inst.id); const mems = await members(c, inst.id);
   return {
     id: inst.id, dungeonId: inst.dungeon_id, name: def.name, status: inst.status, floor: inst.current_floor, floors: def.floors.length, floorName: fl.name,
     leader: inst.leader_character_id, expiresAt: inst.expires_at, isBoss: !!fl.boss, enemies: fl.boss ? [fl.boss] : fl.enemies ?? [],
     gateCleared: !!st.gates?.[inst.current_floor], hasChest: !!fl.chest, chestOpened: !!cl[`chest:${inst.current_floor}:${me}`],
-    clearClaimed: !!cl[`clear:${me}`], battleId: b?.id ?? null,
-    members: (await members(c, inst.id)).map((m) => ({ id: m.id, name: m.name, class: m.class, look: m.appearance, level: m.level, hp: m.hp, maxHp: m.max_hp, mp: m.mp, maxMp: m.max_mp,
-      left: !!m.left_at, online: hub.online(m.id), inBattle: hub.inBattle(m.id) })),
+    clearClaimed: !!cl[`clear:${me}`], battleId: b?.id ?? null, mapId: fl.mapId, backdrop: def.backdrop,
+    members: mems.map((m) => ({ id: m.id, name: m.name, class: m.class, look: m.appearance, level: m.level, hp: m.hp, maxHp: m.max_hp, mp: m.mp, maxMp: m.max_mp,
+      left: !!m.left_at, online: hub.online(m.id), inBattle: hub.inBattle(m.id), x: m.pos_x, y: m.pos_y })),
+    pos: (() => { const row = mems.find((m) => m.id === me); return { x: row?.pos_x ?? MAPS[fl.mapId]?.spawn.x ?? 0, y: row?.pos_y ?? MAPS[fl.mapId]?.spawn.y ?? 0 }; })(),
   };
 }
 const notify = (ids: string[], msg: Record<string, unknown>) => hub.send(ids, 'dungeon', msg);
@@ -88,6 +101,7 @@ export async function enterDungeon(userId: string, characterId: string, dungeonI
     const inst = (await c.query(`INSERT INTO dungeon_instances(dungeon_id,party_id,status,expires_at,leader_character_id,state) VALUES($1,$2,'active',now()+($3||' minutes')::interval,$4,'{"gates":{}}') RETURNING *`,
       [def.id, party?.id ?? null, String(def.ttlMin), me.id])).rows[0];
     for (const id of ids) await c.query('INSERT INTO dungeon_members(instance_id,character_id) VALUES($1,$2)', [inst.id, id]);
+    await placeAll(c, inst, 1);
     await c.query('UPDATE characters SET pos_x=$2,pos_y=$3,pos_updated_at=now() WHERE id = ANY($1)', [ids, Math.round(ent.x), Math.round(ent.y + 24)]);
     return { dungeon: await dview(c, inst, me.id), skipped };
   });
@@ -121,10 +135,12 @@ export async function nextFloor(userId: string, characterId: string) {
     if (!inst.state?.gates?.[inst.current_floor]) throw new HttpError(409, 'gate_not_cleared');
     if (inst.current_floor >= DUNGEONS[inst.dungeon_id].floors.length) throw new HttpError(409, 'last_floor');
     const n = (await c.query('UPDATE dungeon_instances SET current_floor=current_floor+1, updated_at=now() WHERE id=$1 RETURNING *', [inst.id])).rows[0];
+    const placed = await placeAll(c, n, n.current_floor);
     ids = await activeIds(c, inst.id);
+    snapDungeonFloor(inst.id, placed.mapId, placed.x, placed.y);
     return dview(c, n, me.id);
   });
-  notify(ids.filter((x) => x !== characterId), { type: 'update' });
+  notify(ids.filter((x) => x !== characterId), { type: 'floor' });
   return r;
 }
 
@@ -184,7 +200,7 @@ export async function startDungeonBattle(userId: string, characterId: string) {
       log: [{ turn: 0, kind: 'start', text: fl.boss ? `${enemies[0].name}が立ちはだかった！` : `${enemies.map((e) => e.name).join('、')}があらわれた！` }] };
     ids = mem.map((m) => m.id);
     const row = (await c.query(`INSERT INTO battle_logs(character_id,zone,participants,monsters,state,log,dungeon_instance_id) VALUES(NULL,$1,$2,$3,$4,$5,$6) RETURNING *`,
-      [ZONE, ids, JSON.stringify(enemies.map((e) => ({ id: e.id, monsterId: e.monsterId, level: e.level }))), JSON.stringify(state), JSON.stringify(state.log), inst.id])).rows[0];
+      [inst.dungeon_id, ids, JSON.stringify(enemies.map((e) => ({ id: e.id, monsterId: e.monsterId, level: e.level }))), JSON.stringify(state), JSON.stringify(state.log), inst.id])).rows[0];
     return view(row, { resumed: false, pending: [] });
   });
   for (const id of ids) hub.setBattle(id, true);
@@ -288,3 +304,24 @@ export async function sweepDungeons() {
 let timer: NodeJS.Timeout | undefined;
 export const startDungeonSweep = (ms = 1000) => { if (!timer) { timer = setInterval(() => { sweepDungeons().catch(() => {}); }, ms); timer.unref(); } };
 export const stopDungeonSweep = () => { if (timer) clearInterval(timer); timer = undefined; };
+
+/** Server-authoritative walking inside an instance (collision + speed). Does not touch characters.map_id. */
+export const updateDungeonPosition = (userId: string, characterId: unknown, body: any) => tx(async (c) => {
+  const me = await ownChar(c, userId, characterId, true);
+  const inst = await instanceOf(c, me.id, true);
+  if (!inst || inst.status !== 'active') throw new HttpError(409, 'not_in_dungeon');
+  const map = floorMap(inst.dungeon_id, inst.current_floor);
+  const x = Number(body?.x), y = Number(body?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) throw new HttpError(400, 'invalid_position');
+  const row = (await c.query('SELECT pos_x, pos_y, pos_updated_at FROM dungeon_members WHERE instance_id=$1 AND character_id=$2 AND left_at IS NULL', [inst.id, me.id])).rows[0];
+  if (!row) throw new HttpError(409, 'not_in_dungeon');
+  const cur = { x: row.pos_x ?? map.spawn.x, y: row.pos_y ?? map.spawn.y };
+  if (isBlocked(map, { x, y })) return { ok: false, reason: 'blocked', pos: cur, mapId: map.id };
+  const t0 = row.pos_updated_at ? new Date(row.pos_updated_at).getTime() : Date.now();
+  const dt = Math.min(MAX_DT_SEC, (Date.now() - t0) / 1000);
+  const dist = Math.hypot(x - cur.x, y - cur.y);
+  if (dist > PLAYER_SPEED * dt * SPEED_TOLERANCE + SLACK_PX) return { ok: false, reason: 'too_fast', pos: cur, mapId: map.id };
+  const rx = Math.round(x), ry = Math.round(y);
+  await c.query('UPDATE dungeon_members SET pos_x=$3, pos_y=$4, pos_updated_at=now() WHERE instance_id=$1 AND character_id=$2', [inst.id, me.id, rx, ry]);
+  return { ok: true, pos: { x: rx, y: ry }, mapId: map.id };
+});

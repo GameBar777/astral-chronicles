@@ -1,6 +1,6 @@
 import { lookTexture } from '../art/look';
 import Phaser from 'phaser';
-import { SKILLS, BATTLE_ITEMS, STATUS_DEFS, type BattleEvent } from '@astral/shared';
+import { SKILLS, BATTLE_ITEMS, STATUS_DEFS, dungeonBackdrop, type BattleEvent } from '@astral/shared';
 import { api, errText, type CharacterDto } from '../api';
 import { playBgm, sfx } from '../audio';
 import { battlePort } from '../dungeonBus';
@@ -31,11 +31,11 @@ export class BattleScene extends Phaser.Scene {
     this.party = !!this.b.dungeonInstanceId; this.chain = Promise.resolve();
     battlePort.ready(true);
     this.events.once('shutdown', () => battlePort.ready(false));
-    const bg = this.add.image(W / 2, H / 2, 'battle_meadow'); bg.setScale(Math.max(W / bg.width, H / bg.height));
-    if (this.party) { bg.setTint(0x6a5a8a); this.add.rectangle(0, 0, W, H, 0x100818, 0.35).setOrigin(0); } // underground: darkened meadow backdrop (placeholder)
+    const bgKey = this.textures.exists(dungeonBackdrop(this.b.zone)) ? dungeonBackdrop(this.b.zone) : 'battle_meadow';
+    const bg = this.add.image(W / 2, H / 2, bgKey); bg.setScale(Math.max(W / bg.width, H / bg.height));
     this.add.rectangle(0, H, W, H * 0.34, 0x000000, 0.25).setOrigin(0, 1);
     const enemies = this.b.combatants.filter((x) => x.side === 'enemy');
-    playBgm(enemies.some((e) => e.monsterId === 'ruins_golem') ? 'boss' : 'battle');
+    playBgm(enemies.some((e) => /golem|treant|sphinx|sentinel/.test(e.monsterId ?? '')) ? 'boss' : 'battle');
     const groundY = H * 0.62;
     enemies.forEach((e, i) => {
       const n = enemies.length, x = W * (0.2 + (n === 1 ? 0.18 : (0.36 * i) / Math.max(1, n - 1))), y = groundY + (i % 2) * 34 - (n > 1 ? 10 : 0);

@@ -13,7 +13,7 @@ import * as M from '../services/market.js';
 import { ranking } from '../services/ranking.js';
 import { rateLimit } from './rateLimit.js';
 import { hub } from '../rooms/hub.js';
-import { claimClear, enterDungeon, getDungeon, isPartyBattle, leaveDungeon, nextFloor, openChest, partyAct, startDungeonBattle } from '../services/dungeon.js';
+import { claimClear, enterDungeon, getDungeon, isPartyBattle, leaveDungeon, nextFloor, openChest, partyAct, startDungeonBattle, updateDungeonPosition } from '../services/dungeon.js';
 import * as S from '../services/social.js';
 import * as O from '../services/ops.js';
 type Authed = Request & { auth: { sessionId: string; userId: string; role: string } };
@@ -90,6 +90,7 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/characters/:id/unequip', auth, actRl, wrap(async (req: Authed, res) => res.json(await unequip(U(req), P(req), B(req).slot))));
   r.post('/characters/:id/use', auth, actRl, wrap(async (req: Authed, res) => res.json(await useItem(U(req), P(req), B(req).inventoryId, B(req).requestId))));
   r.put('/characters/:id/position', auth, moveRl, wrap(async (req: Authed, res) => { const o = await updatePosition(U(req), P(req), B(req)); res.status(o.ok ? 200 : 409).json(o); }));
+  r.put('/characters/:id/dungeon/position', auth, moveRl, wrap(async (req: Authed, res) => { const o = await updateDungeonPosition(U(req), P(req), B(req)); res.status(o.ok ? 200 : 409).json(o); }));
   r.post('/characters/:id/portal', auth, actRl, wrap(async (req: Authed, res) => res.json(await usePortal(U(req), P(req), B(req).portalId))));
   r.get('/characters/:id/gathering', auth, wrap(async (req: Authed, res) => res.json(await gatherState(U(req), P(req)))));
   r.post('/characters/:id/gather', auth, actRl, wrap(async (req: Authed, res) => res.json(await gather(U(req), P(req), B(req).nodeId, B(req).requestId))));

@@ -26,7 +26,9 @@ export async function openMarket(c: CharacterDto, onChar: (c: CharacterDto) => v
       body.innerHTML = tabs() + `<div class="m-search"><input id="m-q" maxlength="30" placeholder="アイテム名で検索" value="${esc(q)}"><button id="m-go">検索</button></div>
         <div class="m-list">${d.listings.map((l: any) => `<div class="m-row r-${l.rarity}" data-l="${l.id}">${icon(l.itemId)}<span class="nm">${esc(l.name)}${l.enhance ? ` +${l.enhance}` : ''} ×${l.quantity}</span>
           <span class="sub">${esc(l.seller)}・${left(l.expiresAt)}</span><b class="pr">${Number(l.price).toLocaleString()} G</b>
-          ${l.sellerId === c.id ? '<small>自分の出品</small>' : `<button class="m-buy" data-id="${l.id}" data-price="${l.price}" data-name="${esc(l.name)}">購入</button>`}</div>`).join('') || '<div class="s-none">出品はありません</div>'}</div>`;
+          <button class="m-hist" data-item="${l.itemId}" data-name="${esc(l.name)}">相場</button>
+          ${l.sellerId === c.id ? '<small>自分の出品</small>' : `<button class="m-buy" data-id="${l.id}" data-price="${l.price}" data-name="${esc(l.name)}">購入</button>`}</div>`).join('') || '<div class="s-none">出品はありません</div>'}</div>
+        <div id="m-hist" class="r-note"></div>`;
     } else if (cur === 'sell') {
       const d = await api('GET', `/characters/${c.id}/items`);
       const items = d.items.filter((i: any) => !i.equipped && i.category !== 'quest');
@@ -57,6 +59,9 @@ export async function openMarket(c: CharacterDto, onChar: (c: CharacterDto) => v
       run(async () => { const r = await api('POST', `/characters/${c.id}/market/list`, { inventoryId: v('#m-item'), qty: Number(v('#m-qty')), price: Number(v('#m-price')), hours: Number(v('#m-h')), requestId: newRequestId() });
         return `${r.name}×${r.qty} を ${r.price}G で出品しました`; }); }
     if (t.classList.contains('m-cancel')) run(async () => { const r = await api('POST', `/characters/${c.id}/market/cancel`, { listingId: t.dataset.id, requestId: newRequestId() }); return r.status === 'reclaimed' ? '期限切れの出品を回収しました' : '出品を取り消しました'; });
+    if (t.classList.contains('m-hist')) { const box = body.querySelector('#m-hist'); if (box) api('GET', `/market/history/${t.dataset.item}`).then((h) => {
+      box.textContent = h.avg == null ? `${t.dataset.name} の取引履歴はまだありません` : `${t.dataset.name} の平均単価 ${h.avg.toLocaleString()}G（直近${h.sales.length}件）`;
+    }).catch((e) => msg(err(e))); }
   });
   await render().catch((e) => msg(err(e)));
 }

@@ -79,6 +79,7 @@ export const buyListing = (userId: string, characterId: unknown, b: any) => tx(a
     if (!paid.rowCount) throw new ItemError('not_enough_gold');
     await giveBack(c, ch.id, l);
     await c.query(`UPDATE market_listings SET status='sold', buyer_character_id=$2, fee=$3, closed_at=now() WHERE id=$1 AND status='active'`, [l.id, ch.id, fee]);
+    await c.query(`INSERT INTO market_price_history(item_id,unit_price,quantity) VALUES($1,$2,$3)`, [l.item_id, Math.max(1, Math.floor(price / Math.max(1, Number(l.quantity)))), l.quantity]);
     await c.query('UPDATE characters SET gold=gold+$2, updated_at=now() WHERE id=$1', [l.seller_character_id, price - fee]);
     await c.query(`INSERT INTO transactions(character_id,kind,gold_delta,items_delta,idempotency_key,ref_id) VALUES($1,'market_sale',$2,$3,$4,$5)`,
       [l.seller_character_id, price - fee, JSON.stringify([{ itemId: l.item_id, qty: -l.quantity, fee }]), `market:${l.id}:sale`, l.id]);
@@ -101,3 +102,10 @@ export const cancelListing = (userId: string, characterId: unknown, b: any) => t
     return { listingId: l.id, status: expired ? 'reclaimed' : 'cancelled', itemsDelta: [{ itemId: l.item_id, qty: l.quantity }] };
   });
 });
+
+export async function priceHistory(itemId: unknown) {
+  if (typeof itemId !== 'string' || !itemId) return { itemId, sales: [], avg: null };
+  const sales = (await pool.query(`SELECT unit_price "unitPrice", quantity, sold_at "soldAt" FROM market_price_history WHERE item_id=$1 ORDER BY sold_at DESC LIMIT 20`, [itemId])).rows;
+  const avg = sales.length ? Math.round(sales.reduce((t, r) => t + Number(r.unitPrice), 0) / sales.length) : null;
+  return { itemId, sales, avg };
+}

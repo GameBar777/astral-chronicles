@@ -1,7 +1,9 @@
 import type pg from 'pg';
+import { ItemError } from '@astral/shared';
 import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
-import { ownChar, tx, UUID } from './common.js';
+import { addItem, removeItems } from './inventory.js';
+import { ownChar, tx, UUID, notInBattle } from './common.js';
 import { hub, onBattleChange } from '../rooms/hub.js';
 /**
  * PHASE 7 social: friends, party (max 4, leader/invite/leave/kick/promote), guild (minimal: create/invite/accept/leave)
@@ -9,6 +11,7 @@ import { hub, onBattleChange } from '../rooms/hub.js';
  * the session (userId) + owned characterId, never from the request body.
  */
 export const PARTY_MAX = 4, INVITE_TTL_MIN = 10;
+export const GUILD_EXP_PER_LEVEL = 1000;
 const byName = async (c: pg.PoolClient, name: unknown) => {
   if (typeof name !== 'string' || !name.trim()) throw new HttpError(400, 'invalid_name');
   const r = await c.query('SELECT id,name FROM characters WHERE name=$1 AND deleted_at IS NULL', [name.trim()]);
@@ -48,7 +51,10 @@ export async function socialView(userId: string, characterId: string) {
   const p = await partyOf(c, me.id);
   const party = p ? { id: p.id, leader: p.leader, members: (await c.query(`SELECT c.id,c.name,c.class,c.level FROM party_members m JOIN characters c ON c.id=m.character_id WHERE m.party_id=$1 ORDER BY m.joined_at`, [p.id])).rows.map(mem) } : null;
   const g = await guildOf(c, me.id);
-  const guild = g ? { ...g, members: (await c.query(`SELECT c.id,c.name,c.class,c.level,m.rank FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 ORDER BY array_position(ARRAY['leader','officer','member'], m.rank), c.name`, [g.id])).rows.map((r: any) => ({ ...mem(r), rank: r.rank })) } : null;
+  const ginfo = g ? (await c.query('SELECT level, exp FROM guilds WHERE id=$1', [g.id])).rows[0] : null;
+  const storage = g ? (await c.query(`SELECT s.item_id "itemId", d.name, s.quantity FROM guild_storage s JOIN item_definitions d ON d.id=s.item_id WHERE s.guild_id=$1 ORDER BY d.name`, [g.id])).rows : [];
+  const canDeposit = g ? (await c.query(`SELECT i.item_id "itemId", d.name, sum(i.quantity)::int qty FROM inventory i JOIN item_definitions d ON d.id=i.item_id WHERE i.character_id=$1 AND d.category <> 'quest' AND NOT EXISTS (SELECT 1 FROM character_equipment e WHERE e.inventory_id=i.id) GROUP BY i.item_id, d.name ORDER BY d.name`, [me.id])).rows : [];
+  const guild = g ? { ...g, level: ginfo.level, exp: ginfo.exp, expToNext: GUILD_EXP_PER_LEVEL, storage, canDeposit, members: (await c.query(`SELECT c.id,c.name,c.class,c.level,m.rank FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 ORDER BY array_position(ARRAY['leader','officer','member'], m.rank), c.name`, [g.id])).rows.map((r: any) => ({ ...mem(r), rank: r.rank })) } : null;
   const invites = (await c.query(`SELECT i.kind, i.scope_id, c.name "from" FROM social_invites i JOIN characters c ON c.id=i.invited_by WHERE i.character_id=$1 AND i.created_at > now() - interval '${INVITE_TTL_MIN} minutes' ORDER BY i.created_at`, [me.id])).rows
     .map((r) => ({ kind: r.kind, id: r.scope_id, from: r.from }));
   const blocks = (await c.query('SELECT c.id,c.name FROM character_blocks b JOIN characters c ON c.id=b.blocked_character_id WHERE b.character_id=$1 ORDER BY c.name', [me.id])).rows;
@@ -332,4 +338,45 @@ export async function blockRemove(userId: string, characterId: string, targetId:
   const t = uuid(targetId, 'member_not_found');
   await tx(async (c) => { const me = await ownChar(c, userId, characterId); await c.query('DELETE FROM character_blocks WHERE character_id=$1 AND blocked_character_id=$2', [me.id, t]); });
   refresh([characterId]); return { ok: true };
+}
+
+export async function addGuildExp(c: any, characterId: string, amount: number) {
+  const g = await guildOf(c, characterId); if (!g) return;
+  await c.query(`UPDATE guilds SET exp=exp+$2, level=GREATEST(level, 1 + ((exp+$2)/$3)::int) WHERE id=$1`, [g.id, amount, GUILD_EXP_PER_LEVEL]);
+}
+export async function guildStorage(userId: string, characterId: string) {
+  return tx(async (c) => {
+    const me = await ownChar(c, userId, characterId); const g = await guildOf(c, me.id); if (!g) throw new HttpError(409, 'not_in_guild');
+    const items = (await c.query(`SELECT s.item_id "itemId", d.name, s.quantity FROM guild_storage s JOIN item_definitions d ON d.id=s.item_id WHERE s.guild_id=$1 ORDER BY d.name`, [g.id])).rows;
+    const g2 = (await c.query('SELECT level, exp FROM guilds WHERE id=$1', [g.id])).rows[0];
+    return { level: g2.level, exp: g2.exp, expToNext: GUILD_EXP_PER_LEVEL, items };
+  });
+}
+export async function guildDeposit(userId: string, characterId: string, itemId: unknown, qty: unknown) {
+  const q = Number(qty); if (!Number.isInteger(q) || q < 1) throw new HttpError(400, 'invalid_qty');
+  if (typeof itemId !== 'string') throw new HttpError(400, 'invalid_item');
+  return tx(async (c) => {
+    const me = await ownChar(c, userId, characterId, true); const g = await guildOf(c, me.id); if (!g) throw new HttpError(409, 'not_in_guild');
+    await notInBattle(c, me.id);
+    await removeItems(c, me.id, [{ itemId, qty: q }]);
+    await c.query(`INSERT INTO guild_storage(guild_id,item_id,quantity) VALUES($1,$2,$3) ON CONFLICT (guild_id,item_id) DO UPDATE SET quantity=guild_storage.quantity+EXCLUDED.quantity`, [g.id, itemId, q]);
+    await c.query(`INSERT INTO guild_storage_log(guild_id,character_id,action,item_id,quantity) VALUES($1,$2,'deposit',$3,$4)`, [g.id, me.id, itemId, q]);
+    return { ok: true };
+  });
+}
+export async function guildWithdraw(userId: string, characterId: string, itemId: unknown, qty: unknown) {
+  const q = Number(qty); if (!Number.isInteger(q) || q < 1) throw new HttpError(400, 'invalid_qty');
+  if (typeof itemId !== 'string') throw new HttpError(400, 'invalid_item');
+  return tx(async (c) => {
+    const me = await ownChar(c, userId, characterId, true); const g = await guildOf(c, me.id); if (!g) throw new HttpError(409, 'not_in_guild');
+    if (g.rank === 'member') throw new HttpError(403, 'not_guild_officer');
+    await notInBattle(c, me.id);
+    const row = (await c.query('SELECT quantity FROM guild_storage WHERE guild_id=$1 AND item_id=$2 FOR UPDATE', [g.id, itemId])).rows[0];
+    if (!row || row.quantity < q) throw new ItemError('not_enough_materials');
+    if (row.quantity === q) await c.query('DELETE FROM guild_storage WHERE guild_id=$1 AND item_id=$2', [g.id, itemId]);
+    else await c.query('UPDATE guild_storage SET quantity=quantity-$3 WHERE guild_id=$1 AND item_id=$2', [g.id, itemId, q]);
+    await addItem(c, me.id, itemId, q, true);
+    await c.query(`INSERT INTO guild_storage_log(guild_id,character_id,action,item_id,quantity) VALUES($1,$2,'withdraw',$3,$4)`, [g.id, me.id, itemId, q]);
+    return { ok: true };
+  });
 }

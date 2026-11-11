@@ -4,7 +4,7 @@ import { HttpError, login, logout, register, resolveSession, confirmEmail, forgo
 import { listMail } from '../services/mail.js';
 import { createCharacter, listCharacters } from '../services/characters.js';
 import { act, activeBattle, listInventory, startBattle } from '../services/battle.js';
-import { listItems, equip, unequip, useItem } from '../services/inventory.js';
+import { listItems, equip, unequip, useItem, repairItem } from '../services/inventory.js';
 import { updatePosition, usePortal, gather, gatherState } from '../services/world.js';
 import { listRecipes, startCraft, claimCraft, activeJob, enhance, enhanceInfo } from '../services/crafting.js';
 import { listQuests, acceptQuest, turnInQuest } from '../services/quests.js';
@@ -99,6 +99,7 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   r.post('/characters/:id/craft', auth, actRl, wrap(async (req: Authed, res) => res.status(201).json(await startCraft(U(req), P(req), B(req).recipeId, B(req).requestId))));
   r.post('/characters/:id/craft/:jobId/claim', auth, actRl, wrap(async (req: Authed, res) => res.json(await claimCraft(U(req), P(req), String(req.params.jobId)))));
   r.post('/characters/:id/enhance', auth, actRl, wrap(async (req: Authed, res) => res.json(await enhance(U(req), P(req), B(req).inventoryId, B(req).requestId))));
+  r.post('/characters/:id/repair', auth, actRl, wrap(async (req: Authed, res) => res.json(await repairItem(U(req), P(req), B(req).inventoryId, B(req).requestId))));
   // PHASE 5: shop / inn / quests (requestId-idempotent; quest rewards double-guarded)
   r.get('/shops/:npcId', wrap(async (req, res) => res.json(await shopList(String(req.params.npcId)))));
   r.post('/characters/:id/shop/buy', auth, actRl, wrap(async (req: Authed, res) => res.json(await buy(U(req), P(req), B(req)))));
@@ -118,12 +119,15 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   soc('guild/create', (u, c, b) => S.guildCreate(u, c, b.name)); soc('guild/invite', (u, c, b) => S.guildInvite(u, c, b.name)); soc('guild/accept', (u, c, b) => S.guildAccept(u, c, b.guildId)); soc('guild/leave', (u, c) => S.guildLeave(u, c));
   soc('guild/rank', (u, c, b) => S.guildSetRank(u, c, b.characterId, b.rank)); soc('guild/transfer', (u, c, b) => S.guildTransfer(u, c, b.characterId));
   soc('guild/kick', (u, c, b) => S.guildKick(u, c, b.characterId)); soc('block', (u, c, b) => S.blockAdd(u, c, b.name)); soc('unblock', (u, c, b) => S.blockRemove(u, c, b.characterId)); soc('guild/disband', (u, c, b) => S.guildDisband(u, c, b.confirmName));
+  r.get('/characters/:id/guild/storage', auth, wrap(async (req: Authed, res) => res.json(await S.guildStorage(U(req), P(req)))));
+  soc('guild/deposit', (u, c, b) => S.guildDeposit(u, c, b.itemId, b.qty)); soc('guild/withdraw', (u, c, b) => S.guildWithdraw(u, c, b.itemId, b.qty));
   // PHASE 9: player market (requestId-idempotent, escrow) + rankings
   r.get('/market', auth, wrap(async (req: Authed, res) => res.json(await M.browse(req.query as any))));
   r.get('/characters/:id/market', auth, wrap(async (req: Authed, res) => res.json(await M.mine(U(req), P(req)))));
   r.post('/characters/:id/market/list', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.createListing(U(req), P(req), B(req)))));
   r.post('/characters/:id/market/buy', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.buyListing(U(req), P(req), B(req)))));
   r.post('/characters/:id/market/cancel', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.cancelListing(U(req), P(req), B(req)))));
+  r.get('/market/history/:itemId', auth, wrap(async (req: Authed, res) => res.json(await M.priceHistory(String(req.params.itemId)))));
   r.get('/rankings/:kind', wrap(async (req, res) => res.json(await ranking(String(req.params.kind)))));
   r.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof HttpError) return void res.status(err.status).json({ error: err.code });

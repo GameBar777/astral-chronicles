@@ -32,7 +32,7 @@ export async function createCharacter(userId: string, body: any) {
     // PHASE 4 starter gear (equipped)
     const starter: [string, string][] = [[cls === 'mage' || cls === 'priest' ? 'oak_staff' : 'wooden_sword', 'weapon'], ...(cls === 'knight' ? [['wooden_shield', 'shield'] as [string, string]] : [])];
     for (const [item, slot] of starter) {
-      const inv = (await c.query('INSERT INTO inventory(character_id,item_id,quantity) VALUES($1,$2,1) RETURNING id', [id, item])).rows[0].id;
+      const inv = (await c.query('INSERT INTO inventory(character_id,item_id,quantity,durability,max_durability) VALUES($1,$2,1,50,50) RETURNING id', [id, item])).rows[0].id;
       await c.query('INSERT INTO character_equipment(character_id,slot,inventory_id) VALUES($1,$2,$3)', [id, slot, inv]);
     }
     await c.query('COMMIT');

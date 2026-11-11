@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { applyExp, statsAt, resolveTurn, computeRewards, BattleError, BATTLE_ITEMS, SKILLS, type BattleState, type Combatant, type Command, type Rng } from '@astral/shared';
 import { pool } from '../db/pool.js';
 import { HttpError } from './auth.js';
-import { addItem as addInv, equipmentBonus } from './inventory.js';
+import { addItem as addInv, equipmentBonus, wearEquipment } from './inventory.js';
 import { MAPS, TOWN } from '../world/maps.js';
 import { recordKills } from './quests.js';
 export const ZONES = ['green_meadow'];
@@ -103,6 +103,7 @@ export const act = (userId: string, battleId: string, turn: number, command: Com
     const result = st.status;
     const hp = result === 'defeat' ? Math.max(1, Math.floor(p.maxHp * 0.3)) : p.hp; // defeat: revive at 30% (TD-011)
     await c.query('UPDATE character_stats SET hp=$2, mp=$3 WHERE character_id=$1', [row.character_id, Math.min(hp, p.maxHp), p.mp]);
+    await wearEquipment(c, row.character_id);
     if (result === 'defeat') { const sp = MAPS[TOWN].spawn; await c.query('UPDATE characters SET map_id=$2,pos_x=$3,pos_y=$4,pos_updated_at=now() WHERE id=$1', [row.character_id, TOWN, Math.round(sp.x), Math.round(sp.y)]); }
     if (result === 'victory') ({ rewards, levelUp } = await commitRewards(c, row.id, ch, st));
     await c.query(`UPDATE battle_logs SET state=$2, log=$3, result=$4, rewards=$5, ended_at=now(), updated_at=now() WHERE id=$1`,

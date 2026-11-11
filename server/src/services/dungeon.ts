@@ -5,8 +5,9 @@ import { HttpError } from './auth.js';
 import { tx, ownChar, UUID } from './common.js';
 import { MAPS, TOWN } from '../world/maps.js';
 import { hub } from '../rooms/hub.js';
-import { partyOf, partyMemberIds } from './social.js';
+import { partyOf, partyMemberIds, addGuildExp } from './social.js';
 import { addItem, battleRng, consumeItem, fixedMonsters, grantBattleReward, grantGoldExp, inventoryCounts, playerCombatant, view } from './battle.js';
+import { wearEquipment } from './inventory.js';
 /**
  * PHASE 8 instance dungeon (TD-016). One dungeon_instances row per run; membership in dungeon_members (one active per character).
  * Party battles: every member submits a command; the turn resolves when all living members have submitted, when the
@@ -152,7 +153,9 @@ export const claimClear = (userId: string, characterId: string) => tx(async (c) 
   if (!inst) throw new HttpError(409, 'not_in_dungeon');
   if (inst.status !== 'cleared') throw new HttpError(409, 'not_cleared');
   const rw = DUNGEONS[inst.dungeon_id].clearReward;
-  return claim(c, inst, me, `clear:${me.id}`, `dungeon:${inst.id}:clear`, rw.gold, rw.exp, rw.items);
+  const out = await claim(c, inst, me, `clear:${me.id}`, `dungeon:${inst.id}:clear`, rw.gold, rw.exp, rw.items);
+  await addGuildExp(c, me.id, rw.exp);
+  return out;
 });
 
 /* ---------------- party battle ---------------- */
@@ -208,6 +211,7 @@ async function resolveParty(c: pg.PoolClient, row: any): Promise<Push> {
   for (const p of byPid.values()) {
     const hp = st.status === 'defeat' ? Math.max(1, Math.floor(p.maxHp * 0.3)) : ended ? Math.max(1, p.hp) : Math.max(0, p.hp);
     await c.query('UPDATE character_stats SET hp=$2, mp=$3 WHERE character_id=$1', [p.characterId, Math.min(hp, p.maxHp), p.mp]);
+    if (ended && p.characterId) await wearEquipment(c, p.characterId);
   }
   if (st.status === 'victory') {
     const flip = await c.query('UPDATE battle_logs SET rewards_committed=true WHERE id=$1 AND rewards_committed=false RETURNING id', [row.id]);

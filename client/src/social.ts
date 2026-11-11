@@ -30,7 +30,13 @@ function render() {
   const RK: Record<string, string> = { leader: 'マスター', officer: 'オフィサー', member: 'メンバー' }, my = d.guild?.rank;
   const gBtns = (m: any) => m.id === me ? '' : (my === 'leader' ? `${m.rank === 'member' ? `<button data-a="guild/rank" data-rank="officer" data-id="${m.id}">昇格</button>` : `<button data-a="guild/rank" data-rank="member" data-id="${m.id}">降格</button>`}<button data-a="guild/transfer" data-id="${m.id}">譲渡</button><button data-a="guild/kick" data-id="${m.id}">追放</button>`
     : my === 'officer' && m.rank === 'member' ? `<button data-a="guild/kick" data-id="${m.id}">追放</button>` : '');
+  const store = d.guild ? `<div class="s-store"><h5>倉庫　Lv${d.guild.level ?? 1}（EXP ${d.guild.exp ?? 0}/${d.guild.expToNext ?? 1000}）</h5>`
+    + (d.guild.storage ?? []).map((it: any) => `<div class="s-row">${esc(it.name)} ×${it.quantity}${my !== 'member' ? ` <button data-a="guild/withdraw" data-item="${it.itemId}" data-qty="${it.quantity}">引き出す</button>` : ''}</div>`).join('')
+    + ((d.guild.storage ?? []).length ? '' : '<div class="s-none">空</div>')
+    + `<div class="s-row"><select id="s-dep">${(d.guild.canDeposit ?? []).map((it: any) => `<option value="${it.itemId}" data-qty="${it.qty}">${esc(it.name)}（所持${it.qty}）</option>`).join('')}</select>
+      <input id="s-depq" type="number" min="1" value="1" style="width:3.5em"/><button data-a="guild/deposit" ${(d.guild.canDeposit ?? []).length ? '' : 'disabled'}>預ける</button></div></div>` : '';
   const guild = d.guild ? `<div class="s-g">${esc(d.guild.name)} <small>(${RK[d.guild.rank] ?? d.guild.rank})</small></div>` + d.guild.members.map((m: any) => `<div class="s-row">${who(m)} <small class="s-rk ${m.rank}">${RK[m.rank] ?? m.rank}</small>${gBtns(m)}</div>`).join('')
+    + store
     + `<button data-a="guild/leave">ギルド脱退</button>${my === 'leader' ? '<button data-a="guild/disband" class="danger">ギルド解散</button>' : ''}`
     : '<div class="s-none">未所属</div><input id="s-gname" maxlength="16" placeholder="ギルド名(2-16)"/><button data-a="guild/create">ギルド作成</button>';
   el.innerHTML = `<div class="p4-head">フレンド / パーティー / ギルド <button class="x" data-a="close">×</button></div><div class="p4-msg ${msgOk ? 'ok' : 'ng'}">${esc(msg)}</div><div class="p4-body">
@@ -60,5 +66,8 @@ function onClick(e: Event) {
   map['block'] = [{ name }, `${name} をブロックしました（チャット・申請が届かなくなります）`]; map['unblock'] = [{ characterId: id }, 'ブロックを解除しました'];
   if (a === 'guild/transfer') { confirmBox('ギルドマスターを譲渡しますか？<br><small>あなたはオフィサーになります</small>', '譲渡する').then((ok) => { if (ok) act(a, { characterId: id }, 'ギルドマスターを譲渡しました'); }); return; }
   if (a === 'guild/disband') { promptBox(`解散するにはギルド名「${esc(data?.guild?.name ?? '')}」を入力してください`, '解散する').then((n) => { if (n !== null) act(a, { confirmName: n }, 'ギルドを解散しました'); }); return; }
+  if (a === 'guild/deposit') { const sel = el.querySelector('#s-dep') as HTMLSelectElement | null; const q = Number((el.querySelector('#s-depq') as HTMLInputElement | null)?.value || 1);
+    if (sel?.value) act(a, { itemId: sel.value, qty: q }, '倉庫に預けました'); return; }
+  if (a === 'guild/withdraw') { act(a, { itemId: b.dataset.item, qty: Number(b.dataset.qty || 1) }, '倉庫から引き出しました'); return; }
   if (map[a]) act(a, ...map[a]);
 }

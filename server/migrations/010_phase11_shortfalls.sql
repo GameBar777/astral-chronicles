@@ -46,3 +46,7 @@ CREATE TABLE IF NOT EXISTS market_price_history (
   sold_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_market_hist_item ON market_price_history(item_id, sold_at DESC);
+
+-- backfill existing equipment rows created before durability existed
+UPDATE inventory i SET durability=50, max_durability=50
+  FROM equipment_definitions q WHERE q.item_id=i.item_id AND i.max_durability IS NULL;

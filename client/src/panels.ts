@@ -10,6 +10,7 @@ export function closePanel() { root?.remove(); root = null; }
 const icon = (id: string) => `<img class="ic" src="/sprites/icon_${id}.png" onerror="this.style.visibility='hidden'" alt="">`;
 const stat = (e: any) => ['atk', 'def', 'matk', 'mdef'].filter((k) => e?.[k]).map((k) => `${k.toUpperCase()}+${e[k]}`).join(' ');
 const ERR: Record<string, string> = { level_too_low: 'レベルが足りません', class_cannot_equip: 'この職業では装備できません', not_equipment: '装備品ではありません', already_full: 'これ以上回復できません',
+  broken: '耐久が尽きて壊れています', already_repaired: 'すでに修理済みです',
   not_usable: '今は使えません', inventory_full: '持ち物がいっぱいです', not_enough_gold: 'ゴールドが足りません', not_enough_materials: '素材が足りません', craft_busy: '製作中のものがあります',
   not_ready: 'まだ完成していません', already_claimed: '受け取り済みです', too_far: '離れすぎています', max_enhance: 'これ以上強化できません', two_handed: '両手剣を装備中は盾を装備できません',
   node_not_ready: 'まだ採集できません', gather_level_too_low: '採集レベルが足りません', in_battle: '戦闘中です', not_at_portal: '出口の位置がずれています',
@@ -33,10 +34,10 @@ export async function openInventory(c: CharacterDto, onChar: (c: CharacterDto) =
     const d = await api('GET', `/characters/${c.id}/items`);
     const eq = Object.fromEntries(d.items.filter((i: any) => i.equipped).map((i: any) => [i.equipped, i]));
     const slots = EQUIP_SLOTS.map((s: EquipSlot) => { const it = eq[s];
-      return `<div class="slot ${it ? 'on' : ''}" ${it ? `data-un="${s}"` : ''} title="${it ? 'クリックで外す' : ''}"><small>${SLOT_NAMES[s]}</small>${it ? `${icon(it.itemId)}<span>${esc(it.name)}${it.enhance ? ` +${it.enhance}` : ''}</span>` : '<span class="none">—</span>'}</div>`; }).join('');
+      return `<div class="slot ${it ? 'on' : ''}" ${it ? `data-un="${s}"` : ''} title="${it ? 'クリックで外す' : ''}"><small>${SLOT_NAMES[s]}</small>${it ? `${icon(it.itemId)}<span>${esc(it.name)}${it.enhance ? ` +${it.enhance}` : ''}${it.maxDurability != null ? ` <small>${it.durability}/${it.maxDurability}</small>` : ''}</span>` : '<span class="none">—</span>'}</div>`; }).join('');
     const T = d.stats.total, Bn = d.stats.bonus;
     const list = d.items.filter((i: any) => !i.equipped).map((i: any) => `<button class="it r-${i.rarity}" data-id="${i.id}" data-cat="${i.category}">${icon(i.itemId)}<span class="nm">${esc(i.name)}${i.enhance ? ` +${i.enhance}` : ''}</span>
-      <span class="sub">${i.equip ? `${CATEGORY_NAMES[i.equip.category as EquipCategory]} Lv${i.equip.levelReq} ${stat(i.equip)}` : esc(i.description ?? '')}</span><span class="q">${i.qty > 1 ? `×${i.qty}` : ''}</span></button>`).join('');
+      <span class="sub">${i.equip ? `${CATEGORY_NAMES[i.equip.category as EquipCategory]} Lv${i.equip.levelReq} ${stat(i.equip)}${i.maxDurability != null ? ` 耐久${i.durability}/${i.maxDurability}` : ''}` : esc(i.description ?? '')}</span><span class="q">${i.qty > 1 ? `×${i.qty}` : ''}</span></button>`).join('');
     body.innerHTML = `<div class="eqgrid">${slots}</div>
       <div class="stats">ATK <b>${T.atk}</b><i>(+${Bn.atk})</i> DEF <b>${T.def}</b><i>(+${Bn.def})</i> MATK <b>${T.matk}</b><i>(+${Bn.matk})</i> MDEF <b>${T.mdef}</b><i>(+${Bn.mdef})</i><span class="g">${d.gold.toLocaleString()} G</span></div>
       <div class="cap">持ち物 ${d.slotsUsed}/${d.slotsMax}　<small>装備品:クリックで装備　消耗品:クリックで使用</small></div><div class="items">${list || '<div class="none">なにもない</div>'}</div>`;
@@ -54,13 +55,13 @@ export async function openInventory(c: CharacterDto, onChar: (c: CharacterDto) =
 }
 export async function openSmith(c: CharacterDto, onChar: (c: CharacterDto) => void) {
   const { body, msg } = shell('鍛冶屋 ゴルド「何を打とうか？」', 'smith');
-  let tab: 'craft' | 'enhance' = 'craft', busy = false; let timer = 0;
+  let tab: 'craft' | 'enhance' | 'repair' = 'craft', busy = false; let timer = 0;
   const render = async () => {
     clearInterval(timer);
     const [d, recipes, job] = await Promise.all([api('GET', `/characters/${c.id}/items`), api('GET', '/recipes'), api('GET', `/characters/${c.id}/crafting`)]);
     const have = (id: string) => d.items.filter((i: any) => i.itemId === id && !i.equipped).reduce((t: number, i: any) => t + i.qty, 0);
     const name = (id: string) => d.items.find((i: any) => i.itemId === id)?.name ?? ({ copper_ore: '銅鉱石', iron_ore: '鉄鉱石', magic_stone: '魔石', wood: '木材', herb: '薬草', beast_hide: '獣の皮' } as any)[id] ?? id;
-    const tabs = `<div class="tabs"><button data-tab="craft" class="${tab === 'craft' ? 'on' : ''}">製作</button><button data-tab="enhance" class="${tab === 'enhance' ? 'on' : ''}">強化</button><span class="g">${d.gold.toLocaleString()} G</span></div>`;
+    const tabs = `<div class="tabs"><button data-tab="craft" class="${tab === 'craft' ? 'on' : ''}">製作</button><button data-tab="enhance" class="${tab === 'enhance' ? 'on' : ''}">強化</button><button data-tab="repair" class="${tab === 'repair' ? 'on' : ''}">修理</button><span class="g">${d.gold.toLocaleString()} G</span></div>`;
     let inner = '';
     if (tab === 'craft') {
       const j = job.job;
@@ -69,7 +70,7 @@ export async function openSmith(c: CharacterDto, onChar: (c: CharacterDto) => vo
         return `<div class="rc ${ok ? '' : 'dim'}">${icon(r.resultItemId)}<div class="rn">${esc(r.resultName)}${r.resultQty > 1 ? ` ×${r.resultQty}` : ''}<small>Lv${r.requiredLevel}・${r.craftTimeSec}秒${r.goldCost ? `・${r.goldCost}G` : ''}</small></div>
           <div class="mats">${r.materials.map((m: any) => `<span class="${have(m.itemId) >= m.qty ? '' : 'lack'}">${icon(m.itemId)}${esc(name(m.itemId))} ${have(m.itemId)}/${m.qty}</span>`).join('')}</div>
           <button data-r="${r.id}" ${ok && !j ? '' : 'disabled'}>作る</button></div>`; }).join('');
-    } else {
+    } else if (tab === 'enhance') {
       const eqs = d.items.filter((i: any) => i.equip);
       const infos = await Promise.all(eqs.map((i: any) => api('GET', `/enhance-info/${i.enhance}`)));
       inner = eqs.map((i: any, k: number) => { const inf = infos[k];
@@ -77,12 +78,22 @@ export async function openSmith(c: CharacterDto, onChar: (c: CharacterDto) => vo
         return `<div class="rc ${ok ? '' : 'dim'}">${icon(i.itemId)}<div class="rn">${esc(i.name)} <b>+${i.enhance}</b>${i.equipped ? '<small>装備中</small>' : ''}<small>${stat(i.equip)}</small></div>
           <div class="mats">${inf ? `<span>成功率 ${Math.round(inf.rate * 100)}%</span><span class="${d.gold >= inf.gold ? '' : 'lack'}">${inf.gold}G</span>${inf.materials.map((m: any) => `<span class="${have(m.itemId) >= m.qty ? '' : 'lack'}">${icon(m.itemId)}${esc(name(m.itemId))} ${have(m.itemId)}/${m.qty}</span>`).join('')}` : '<span>最大強化</span>'}</div>
           <button data-e="${i.id}" ${ok ? '' : 'disabled'}>強化</button></div>`; }).join('') + '<div class="note">※失敗しても装備は壊れません（ゴールドと素材は消費）</div>';
+    } else {
+      const eqs = d.items.filter((i: any) => i.equip && i.maxDurability != null);
+      inner = eqs.map((i: any) => {
+        const miss = Math.max(0, i.maxDurability - i.durability), gold = miss * 2, ok = miss > 0 && d.gold >= gold;
+        return `<div class="rc ${ok ? '' : 'dim'}">${icon(i.itemId)}<div class="rn">${esc(i.name)}${i.enhance ? ` +${i.enhance}` : ''}${i.equipped ? '<small>装備中</small>' : ''}<small>耐久 ${i.durability}/${i.maxDurability}</small></div>
+          <div class="mats"><span class="${d.gold >= gold ? '' : 'lack'}">${miss ? gold + 'G' : '修理不要'}</span></div>
+          <button data-fix="${i.id}" ${ok ? '' : 'disabled'}>修理</button></div>`;
+      }).join('') + '<div class="note">修理は欠けた耐久1につき2G。戦闘のたびに装備中の耐久が1減ります。0になると外れます。</div>';
     }
     body.innerHTML = tabs + `<div class="rlist">${inner}</div>`;
     body.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab as any; render(); }));
     body.querySelectorAll<HTMLButtonElement>('[data-r]').forEach((b) => (b.onclick = () => run(() => api('POST', `/characters/${c.id}/craft`, { recipeId: b.dataset.r, requestId: newRequestId() }), () => '製作を開始した')));
     body.querySelectorAll<HTMLButtonElement>('[data-e]').forEach((b) => (b.onclick = () => run(() => api('POST', `/characters/${c.id}/enhance`, { inventoryId: b.dataset.e, requestId: newRequestId() }),
       (r) => (sfx(r.success ? 'enhance' : 'hit'), r.success ? `強化成功！ ${r.name} +${r.to}` : `強化失敗… ${r.name} は +${r.from} のまま`), (r) => r.success)));
+    body.querySelectorAll<HTMLButtonElement>('[data-fix]').forEach((b) => (b.onclick = () => run(() => api('POST', `/characters/${c.id}/repair`, { inventoryId: b.dataset.fix, requestId: newRequestId() }),
+      (r) => `${r.name} を修理した（-${r.gold}G）`)));
     const cl = body.querySelector<HTMLButtonElement>('#claim');
     if (cl && job.job) {
       cl.onclick = () => run(() => api('POST', `/characters/${c.id}/craft/${job.job.id}/claim`), (r) => `${r.item.name} ×${r.item.qty} が完成した！`);

@@ -113,7 +113,7 @@
 - スマホ: タッチ端末で仮想ジョイスティック（8方向）・E・MENU ボタン、狭い画面用のレイアウト。パネル/戦闘中はパッドを隠す
 - 負荷試験: 1プロセスで 50 / 100 同時接続、遅延 p99 64ms / 67ms、取りこぼし・補正・エラー 0（docs/LOAD_TEST.md）
 - 公開準備: .env.example 更新、docs/DEPLOY.md、Dockerfile / docker-compose.yml（**未検証**）、本番ビルドの同一オリジン配信を prod-smoke E2E で確認
-- テスト: shared 57/57、server 96/96（phase10-security-ops 14件）、E2E phase10 34/34、prod-smoke 3/3、回帰 E2E_RESULTS_PLACEHOLDER
+- テスト: shared 57/57、server 96/96（phase10-security-ops 14件）、E2E phase10 34/34、prod-smoke 3/3、回帰 E2E phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27・phase8 36/36・phase9 24/24（phase8 は1回目にボス戦が長時間化し3件FAIL→再実行で合格、BUG-023 観察中）
 - スクショ: docs/screenshots/phase10-title-maintenance / appearance / cobble / menu / map / settings / whisper / block / maintenance-notice / mobile / mobile-menu / production-build（.png）
 - 未実装・制約（隠さず）: 髪型の反映、魔法使いの髪色、管理画面UI（APIのみ）、Docker/実ホスティング/TLS は未検証（費用・アカウントが必要なため未実施）、混合負荷・複数プロセス構成は未試験、サウンドの音質は人の耳で未確認、パスワード再設定/メール確認は未実装
 

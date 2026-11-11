@@ -45,7 +45,7 @@ export async function socialView(userId: string, characterId: string) {
   const p = await partyOf(c, me.id);
   const party = p ? { id: p.id, leader: p.leader, members: (await c.query(`SELECT c.id,c.name,c.class,c.level FROM party_members m JOIN characters c ON c.id=m.character_id WHERE m.party_id=$1 ORDER BY m.joined_at`, [p.id])).rows.map(mem) } : null;
   const g = await guildOf(c, me.id);
-  const guild = g ? { ...g, members: (await c.query(`SELECT c.id,c.name,c.class,c.level FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 ORDER BY c.name`, [g.id])).rows.map(mem) } : null;
+  const guild = g ? { ...g, members: (await c.query(`SELECT c.id,c.name,c.class,c.level,m.rank FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 ORDER BY array_position(ARRAY['leader','officer','member'], m.rank), c.name`, [g.id])).rows.map((r: any) => ({ ...mem(r), rank: r.rank })) } : null;
   const invites = (await c.query(`SELECT i.kind, i.scope_id, c.name "from" FROM social_invites i JOIN characters c ON c.id=i.invited_by WHERE i.character_id=$1 AND i.created_at > now() - interval '${INVITE_TTL_MIN} minutes' ORDER BY i.created_at`, [me.id])).rows
     .map((r) => ({ kind: r.kind, id: r.scope_id, from: r.from }));
   return { me: me.id, friends: fr.filter((f) => f.status === 'accepted').map(mem), outgoing: fr.filter((f) => f.status === 'pending').map((f) => ({ id: f.id, name: f.name })), incoming, party, guild, invites };
@@ -247,3 +247,54 @@ export async function chatHistory(characterId: string, mapId: string, limit = 30
   return r.rows.reverse().map((x) => ({ id: Number(x.id), channel: x.channel === 'say' ? 'local' : x.channel, body: x.body, at: x.at, ...(x.sid ? { from: { id: x.sid, name: x.name } } : {}) }));
 }
 export const friendsOf = (id: string) => friendIds(pool, id);
+
+/* ---------- guild management (PHASE 9): roles, kick, leader transfer, disband ---------- */
+const RANK_JA: Record<string, string> = { leader: 'マスター', officer: 'オフィサー', member: 'メンバー' };
+async function guildCtx(c: pg.PoolClient, userId: string, characterId: string, targetId?: unknown) {
+  const me = await ownChar(c, userId, characterId, true); const g = await guildOf(c, me.id); if (!g) throw new HttpError(409, 'not_in_guild');
+  await c.query('SELECT id FROM guilds WHERE id=$1 FOR UPDATE', [g.id]); // serialise every membership/rank change of this guild
+  let t: { id: string; name: string; rank: string } | undefined;
+  if (targetId !== undefined) { const tid = uuid(targetId, 'member_not_found');
+    t = (await c.query('SELECT c.id, c.name, m.rank FROM guild_members m JOIN characters c ON c.id=m.character_id WHERE m.guild_id=$1 AND m.character_id=$2', [g.id, tid])).rows[0];
+    if (!t) throw new HttpError(404, 'member_not_found'); if (t.id === me.id) throw new HttpError(400, 'self'); }
+  return { me, g, t: t! };
+}
+/** leader only: member ⇄ officer */
+export async function guildSetRank(userId: string, characterId: string, targetId: unknown, rank: unknown) {
+  if (rank !== 'officer' && rank !== 'member') throw new HttpError(400, 'invalid_rank');
+  let ids: string[] = [], text = '';
+  await tx(async (c) => { const { g, t } = await guildCtx(c, userId, characterId, targetId);
+    if (g.rank !== 'leader') throw new HttpError(403, 'not_guild_leader');
+    await c.query('UPDATE guild_members SET rank=$3 WHERE guild_id=$1 AND character_id=$2', [g.id, t.id, rank]);
+    ids = await guildMemberIds(c, g.id); text = `${t.name} が${RANK_JA[rank]}になりました`; });
+  refresh(ids); await systemMsg(ids, text); return { ok: true };
+}
+/** leader only: hand the guild to another member (old leader becomes officer) */
+export async function guildTransfer(userId: string, characterId: string, targetId: unknown) {
+  let ids: string[] = [], text = '';
+  await tx(async (c) => { const { me, g, t } = await guildCtx(c, userId, characterId, targetId);
+    if (g.rank !== 'leader') throw new HttpError(403, 'not_guild_leader');
+    await c.query(`UPDATE guild_members SET rank='officer' WHERE guild_id=$1 AND character_id=$2`, [g.id, me.id]);
+    await c.query(`UPDATE guild_members SET rank='leader' WHERE guild_id=$1 AND character_id=$2`, [g.id, t.id]);
+    await c.query('UPDATE guilds SET leader_character_id=$2 WHERE id=$1', [g.id, t.id]);
+    ids = await guildMemberIds(c, g.id); text = `${t.name} がギルドマスターになりました`; });
+  refresh(ids); await systemMsg(ids, text); return { ok: true };
+}
+/** leader: kick anyone; officer: kick members only */
+export async function guildKick(userId: string, characterId: string, targetId: unknown) {
+  let ids: string[] = [], t: any;
+  await tx(async (c) => { const r = await guildCtx(c, userId, characterId, targetId); t = r.t;
+    if (r.g.rank === 'member' || (r.g.rank === 'officer' && t.rank !== 'member')) throw new HttpError(403, 'not_allowed');
+    await c.query('DELETE FROM guild_members WHERE guild_id=$1 AND character_id=$2', [r.g.id, t.id]); ids = await guildMemberIds(c, r.g.id); });
+  refresh([t.id, ...ids]); await systemMsg([t.id], 'ギルドから外されました'); await systemMsg(ids, `${t.name} がギルドから外されました`); return { ok: true };
+}
+/** leader only: removes the guild and every membership / pending invite */
+export async function guildDisband(userId: string, characterId: string, confirmName: unknown) {
+  let ids: string[] = [], name = '';
+  await tx(async (c) => { const { g } = await guildCtx(c, userId, characterId);
+    if (g.rank !== 'leader') throw new HttpError(403, 'not_guild_leader');
+    if (confirmName !== g.name) throw new HttpError(400, 'confirm_name_mismatch');
+    ids = await guildMemberIds(c, g.id); name = g.name;
+    await c.query(`DELETE FROM social_invites WHERE kind='guild' AND scope_id=$1`, [g.id]); await c.query('DELETE FROM guilds WHERE id=$1', [g.id]); });
+  refresh(ids); await systemMsg(ids, `ギルド「${name}」は解散しました`); return { ok: true };
+}

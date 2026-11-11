@@ -58,3 +58,6 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 
 ## PHASE 8
 草原の東側「古代遺跡の入口」で E → 入場。E2E: `cd client && node e2e/phase8.mjs`（3ブラウザ、約4分）
+
+## PHASE 9
+取引所 [B]（アステリア内）、ランキング [R]、ギルド管理はソーシャル [O]。E2E: `cd client && node e2e/phase9.mjs`（約1分。ランキングのキャッシュ待ち31秒を含む）

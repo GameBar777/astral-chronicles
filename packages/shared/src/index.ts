@@ -8,3 +8,4 @@ export * from './battle.js';
 export * from './items.js';
 export * from './npcs.js';
 export * from './dungeons.js';
+export * from './market.js';

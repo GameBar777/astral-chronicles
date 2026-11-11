@@ -8,6 +8,8 @@ import { updatePosition, usePortal, gather, gatherState } from '../services/worl
 import { listRecipes, startCraft, claimCraft, activeJob, enhance, enhanceInfo } from '../services/crafting.js';
 import { listQuests, acceptQuest, turnInQuest } from '../services/quests.js';
 import { shopList, buy, sell, rest } from '../services/npc.js';
+import * as M from '../services/market.js';
+import { ranking } from '../services/ranking.js';
 import { rateLimit } from './rateLimit.js';
 import { hub } from '../rooms/hub.js';
 import { claimClear, enterDungeon, getDungeon, isPartyBattle, leaveDungeon, nextFloor, openChest, partyAct, startDungeonBattle } from '../services/dungeon.js';
@@ -84,6 +86,15 @@ export function apiRouter(opts: { authLimit?: number; createLimit?: number; batt
   soc('party/leave', (u, c) => S.partyLeave(u, c)); soc('party/kick', (u, c, b) => S.partyKick(u, c, b.characterId)); soc('party/leader', (u, c, b) => S.partyPromote(u, c, b.characterId));
   soc('invites/decline', (u, c, b) => S.inviteDecline(u, c, b.kind, b.id));
   soc('guild/create', (u, c, b) => S.guildCreate(u, c, b.name)); soc('guild/invite', (u, c, b) => S.guildInvite(u, c, b.name)); soc('guild/accept', (u, c, b) => S.guildAccept(u, c, b.guildId)); soc('guild/leave', (u, c) => S.guildLeave(u, c));
+  soc('guild/rank', (u, c, b) => S.guildSetRank(u, c, b.characterId, b.rank)); soc('guild/transfer', (u, c, b) => S.guildTransfer(u, c, b.characterId));
+  soc('guild/kick', (u, c, b) => S.guildKick(u, c, b.characterId)); soc('guild/disband', (u, c, b) => S.guildDisband(u, c, b.confirmName));
+  // PHASE 9: player market (requestId-idempotent, escrow) + rankings
+  r.get('/market', auth, wrap(async (req: Authed, res) => res.json(await M.browse(req.query as any))));
+  r.get('/characters/:id/market', auth, wrap(async (req: Authed, res) => res.json(await M.mine(U(req), P(req)))));
+  r.post('/characters/:id/market/list', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.createListing(U(req), P(req), B(req)))));
+  r.post('/characters/:id/market/buy', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.buyListing(U(req), P(req), B(req)))));
+  r.post('/characters/:id/market/cancel', auth, actRl, wrap(async (req: Authed, res) => res.json(await M.cancelListing(U(req), P(req), B(req)))));
+  r.get('/rankings/:kind', wrap(async (req, res) => res.json(await ranking(String(req.params.kind)))));
   r.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof HttpError) return void res.status(err.status).json({ error: err.code });
     if (err?.type === 'entity.parse.failed') return void res.status(400).json({ error: 'invalid_json' });

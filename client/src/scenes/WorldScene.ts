@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { openMarket, openRanking } from '../market';
 import { inputToVector, vectorToDirection, moveWithCollision, PLAYER_SPEED, type Direction, type MapData, type Vec2, DUNGEONS } from '@astral/shared';
 import asteria from '../../../assets/maps/asteria.json';
 import meadow from '../../../assets/maps/green_meadow.json';
@@ -91,11 +92,13 @@ export class WorldScene extends Phaser.Scene {
     this.keys = this.input.keyboard!.addKeys({ up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT, w: K.W, a: K.A, s: K.S, d: K.D }) as any;
     this.input.keyboard!.addKey(K.O).on('down', () => toggleSocial());
     this.keyE = this.input.keyboard!.addKey(K.E); this.keyI = this.input.keyboard!.addKey(K.I);
+    this.input.keyboard!.addKey(K.B).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openMarket(this.character, (c) => this.onCharacter(c)); });
+    this.input.keyboard!.addKey(K.R).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openRanking(); });
     this.input.keyboard!.addKey(K.L).on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openQuests(null, this.character, (c) => this.onCharacter(c)); });
     this.keyE.on('down', () => this.interact()); this.keyI.on('down', () => { if (panelOpen()) closePanel(); else if (!this.inBattle) openInventory(this.character, (c) => this.onCharacter(c)); });
     this.events.once('shutdown', () => { closePanel(); this.keyE.removeAllListeners(); this.keyI.removeAllListeners(); });
     this.prompt = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: '#fff4cc', backgroundColor: '#3a2a14ee', padding: { x: 5, y: 2 } }).setOrigin(0.5, 1).setDepth(1e6 + 1).setVisible(false);
-    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  I:持ち物`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
+    const info = this.add.text(0, 0, `${this.map.name}  WASD/矢印:移動  E:調べる/採集  I:持ち物  L:クエスト  O:ソーシャル  B:取引所  R:ランキング`, { fontFamily: FONT, fontSize: '13px', color: '#fff', backgroundColor: '#000a', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(1e7);
     const place = () => this.hud(info, Math.round(this.scale.width / 2 - info.width / 2), this.scale.height - info.height - 8);
     place(); this.scale.on('resize', place);
     this.events.once('shutdown', () => this.scale.off('resize', place));

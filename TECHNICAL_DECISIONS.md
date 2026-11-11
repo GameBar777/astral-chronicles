@@ -58,3 +58,9 @@
 - ボスのフェーズ制: monster_definitions.behavior.phases（HP割合しきい値で倍率と行動表を差し替え、shared の resolveTurn で判定）。フェーズ表はクライアントへ送らない
 - DungeonRoom（instanceId でフィルタ）は在室・通知の経路のみ。状態の正は Postgres + REST
 - 環境: /opt が箱リセットで消えるため PG バイナリは `/workspace/.tools/astral-pg`、`scripts/bootstrap-env.sh` で再構築（node_modules・PGバイナリ・空ディレクトリ）
+
+## TD-017 プレイヤー市場・ランキング（PHASE 9）
+- market_listings（migration 008）。出品時に在庫を減らしエスクロー、購入は出品行 FOR UPDATE 下で「買い手のゴールド条件付き減算→品物付与→status=sold→売り手へ入金→売却 transactions(market:<id>:sale)」を1トランザクションで実行
+- 手数料は出品時の率を fee_rate に保存（将来の率変更が既存出品に影響しない）。fee=max(1,floor(price×0.05))
+- 期限切れは購入時/一覧時に判定（スイープ不要）、出品者が「回収」で返却。返却/購入には空き枠が必要（inventory_full）
+- ランキングは集計クエリ＋プロセス内30秒キャッシュ（単一プロセス前提）

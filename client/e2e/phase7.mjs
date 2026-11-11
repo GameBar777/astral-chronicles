@@ -66,7 +66,7 @@ await shot(A, 'phase7-friends.png');
 
 // --- Guild A + C, guild chat
 await A.p.fill('#s-gname', 'ギルド' + A.name.slice(1)); await btn(A, 'guild/create');
-ok('guild created', await waitFor(async () => (await socialTxt(A)).includes('leader')));
+ok('guild created', await waitFor(async () => (await socialTxt(A)).includes('マスター')));
 await A.p.fill('#s-pname', C.name); await btn(A, 'guild/invite');
 ok('C sees guild invite', await waitFor(async () => /ギルド招待/.test(await socialTxt(C))));
 await btn(C, 'guild/accept', '参加');

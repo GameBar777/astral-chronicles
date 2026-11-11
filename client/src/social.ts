@@ -1,5 +1,6 @@
 /** PHASE 7 social panel: friends / party / guild (REST), refreshed by server 'social' push events. Toggle with [O]. */
 import { api, errText } from './api';
+import { confirmBox, promptBox } from './dungeonBus';
 const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const CLS: Record<string, string> = { warrior: '戦士', knight: '騎士', mage: '魔法使い', priest: '僧侶' };
 let el: HTMLDivElement | null = null, cid = '', data: any = null, msg = '', msgOk = true;
@@ -26,7 +27,11 @@ function render() {
       ${lead && m.id !== me ? `<button data-a="party/leader" data-id="${m.id}">リーダー</button><button data-a="party/kick" data-id="${m.id}">追放</button>` : ''}</div>`).join('')
       + `<button data-a="party/leave">パーティーを抜ける</button>`
     : '<div class="s-none">未参加</div><button data-a="party/create">パーティー作成</button>';
-  const guild = d.guild ? `<div class="s-g">${esc(d.guild.name)} <small>(${d.guild.rank})</small></div>` + d.guild.members.map((m: any) => `<div class="s-row">${who(m)} <small>${m.rank}</small></div>`).join('') + `<button data-a="guild/leave">ギルド脱退</button>`
+  const RK: Record<string, string> = { leader: 'マスター', officer: 'オフィサー', member: 'メンバー' }, my = d.guild?.rank;
+  const gBtns = (m: any) => m.id === me ? '' : (my === 'leader' ? `${m.rank === 'member' ? `<button data-a="guild/rank" data-rank="officer" data-id="${m.id}">昇格</button>` : `<button data-a="guild/rank" data-rank="member" data-id="${m.id}">降格</button>`}<button data-a="guild/transfer" data-id="${m.id}">譲渡</button><button data-a="guild/kick" data-id="${m.id}">追放</button>`
+    : my === 'officer' && m.rank === 'member' ? `<button data-a="guild/kick" data-id="${m.id}">追放</button>` : '');
+  const guild = d.guild ? `<div class="s-g">${esc(d.guild.name)} <small>(${RK[d.guild.rank] ?? d.guild.rank})</small></div>` + d.guild.members.map((m: any) => `<div class="s-row">${who(m)} <small class="s-rk ${m.rank}">${RK[m.rank] ?? m.rank}</small>${gBtns(m)}</div>`).join('')
+    + `<button data-a="guild/leave">ギルド脱退</button>${my === 'leader' ? '<button data-a="guild/disband" class="danger">ギルド解散</button>' : ''}`
     : '<div class="s-none">未所属</div><input id="s-gname" maxlength="16" placeholder="ギルド名(2-16)"/><button data-a="guild/create">ギルド作成</button>';
   el.innerHTML = `<div class="p4-head">フレンド / パーティー / ギルド <button class="x" data-a="close">×</button></div><div class="p4-msg ${msgOk ? 'ok' : 'ng'}">${esc(msg)}</div><div class="p4-body">
     ${inv ? `<h4>招待</h4>${inv}` : ''}
@@ -48,5 +53,9 @@ function onClick(e: Event) {
     'friends/accept': [{ characterId: id }, 'フレンドになりました'], 'friends/remove': [{ characterId: id }, 'フレンドを削除しました'],
     'guild/create': [{ name: (el.querySelector('#s-gname') as HTMLInputElement | null)?.value.trim() }, 'ギルドを作成しました'], 'guild/invite': [{ name }, `${name} をギルドに招待しました`],
     'guild/accept': [{ guildId: id }, 'ギルドに参加しました'], 'guild/leave': [{}, 'ギルドを脱退しました'] };
+  map['guild/rank'] = [{ characterId: id, rank: b.dataset.rank }, b.dataset.rank === 'officer' ? 'オフィサーに昇格しました' : 'メンバーに降格しました'];
+  map['guild/kick'] = [{ characterId: id }, 'ギルドから追放しました'];
+  if (a === 'guild/transfer') { confirmBox('ギルドマスターを譲渡しますか？<br><small>あなたはオフィサーになります</small>', '譲渡する').then((ok) => { if (ok) act(a, { characterId: id }, 'ギルドマスターを譲渡しました'); }); return; }
+  if (a === 'guild/disband') { promptBox(`解散するにはギルド名「${esc(data?.guild?.name ?? '')}」を入力してください`, '解散する').then((n) => { if (n !== null) act(a, { confirmName: n }, 'ギルドを解散しました'); }); return; }
   if (map[a]) act(a, ...map[a]);
 }

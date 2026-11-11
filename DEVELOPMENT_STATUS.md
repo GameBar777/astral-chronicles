@@ -91,3 +91,14 @@
 - テスト: shared 57 / server 73（phase8-dungeon 10件）全通過、E2E phase8 36/36（3ブラウザ同時・切断/再接続含む）、回帰 phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27
 - スクショ: docs/screenshots/phase8-*.png（entrance, entry-confirm, dungeon-f1, party-battle-wait, party-battle-3players, party-victory, chest, floor2-after, boss-floor, boss-battle, boss-phase, reconnect-battle, boss-victory, clear-reward, back-world）
 - 制約（隠さず）: ダンジョンは5種中「古代地下遺跡」1種のみ。ダンジョン内は1画面の部屋表示で歩行移動なし（パネル操作）。戦闘背景は草原画像を流用、ボスはゴブリン画像の流用（専用アート未作成）。E2E はテスト用にステータスをDBで増強（バランス検証ではない）
+
+## PHASE 9 経済・ギルド・ランキング（2026-11-12）完了（テスト通過）
+- プレイヤー市場（取引所 [B]、アステリア内のみ）: 出品（数量・合計価格1〜9,999,999G・期間1/24/72時間、同時10件まで）、検索/購入、取消、期限切れ回収、自分の出品状況・購入履歴
+- 出品物はエスクロー（出品時に所持品から預かり）。売却時は手数料5%（最低1G）を引いて出品者へ（オフラインでも反映、Systemチャットで通知）。強化値は引き継ぎ
+- 不正防止: 全操作 requestId 冪等、出品行ロック下で active→sold の1回のみの遷移、同一アカウント内の売買禁止、価格変更検知（expectedPrice）、装備中/クエスト品は出品不可、戦闘中不可。並列購入テストで1件のみ成立・ゴールド保存則（買い手-100 / 売り手+95 / 手数料5消滅）を確認
+- ギルド管理: マスターによるオフィサー昇格/降格・マスター譲渡・追放（オフィサーはメンバーのみ追放可）・解散（ギルド名の入力確認）。ソーシャルパネル [O] から操作（DOMの確認ダイアログ）
+- ランキング [R]: レベル（Lv→EXP）、ギルド（合計Lv→人数）、ダンジョン踏破回数。30秒キャッシュ
+- 修正: BUG-021（取引所でボタン操作後に Esc で閉じられない）
+- テスト: shared 57 / server 82（phase9-economy 9件）全通過、E2E phase9 24/24（2ブラウザ、UIで出品→検索→購入、履歴、取消、ギルド役職/譲渡/解散、ランキング）、phase7 27/27 回帰
+- スクショ: docs/screenshots/phase9-market-sell.png / phase9-market-browse.png / phase9-market-confirm.png / phase9-market-bought.png / phase9-market-history.png / phase9-guild-roles.png / phase9-ranking.png
+- 未実装（隠さず）: 装備の修理（耐久度の仕組みが無い）、ギルドレベル/ギルド倉庫、市場の価格履歴グラフ、取引所NPCの配置（キー操作で開く）

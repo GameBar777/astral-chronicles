@@ -38,8 +38,9 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 `scripts/db-backup.sh` → `backups/*.dump`。復旧: `pg_restore -h 127.0.0.1 -p 5433 -U astral -d astral --clean <file>`
 
 ## デプロイ
-`docs/DEPLOY.md` 参照（本番ビルド・同一オリジン配信・管理者設定・管理API）。Dockerfile / docker-compose.yml は**未検証**（箱に Docker 無し）。
-本番ビルド確認: `npm run build` → `NODE_ENV=production DATABASE_URL=<既定以外のパスワード> node server/dist/index.js` → `cd client && E2E_URL=http://127.0.0.1:2567/ node e2e/prod-smoke.mjs`
+`docs/DEPLOY.md` 参照（本番ビルド・同一オリジン配信・管理者設定・管理UI `/admin.html`）。Dockerfile / docker-compose.yml のコンテナ実行はこの箱では未検証（docs/PROD_VERIFY.md）。
+本番相当の確認: `bash scripts/verify-prod.sh`（または `npm run build` → 既定以外のパスワードで `NODE_ENV=production node server/dist/index.js`）。
+音声の客観検証: `node scripts/audio-verify.mjs`。混合負荷: `npx tsx server/scripts/load-mixed.mjs`（docs/LOAD_TEST.md）。
 
 ## API（PHASE 2）
 `GET /api/classes` `GET /api/exp-table` `POST /api/auth/register|login` `POST /api/auth/logout`※ `GET /api/me`※ `GET|POST /api/characters`※（※ `Authorization: Bearer <token>`）
@@ -58,7 +59,7 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 `bash scripts/bootstrap-env.sh && npm run db:start`（node_modules・PostgreSQLバイナリ `/workspace/.tools/astral-pg`・PGの空ディレクトリを再作成）
 
 ## PHASE 8
-草原の東側「古代遺跡の入口」で E → 入場。E2E: `cd client && node e2e/phase8.mjs`（3ブラウザ、約4分）
+草原の入口（古代地下遺跡・忘れられた鉱山・闇の森林・砂漠の神殿・星晶の塔）で E → 入場。ダンジョン内は歩行マップ。E2E: `cd client && node e2e/phase8.mjs`（3ブラウザ、約4分）
 
 ## PHASE 9
 取引所 [B]（アステリア内）、ランキング [R]、ギルド管理はソーシャル [O]。E2E: `cd client && node e2e/phase9.mjs`（約1分。ランキングのキャッシュ待ち31秒を含む）
@@ -66,6 +67,6 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 ## PHASE 10
 - 操作: M=メニュー（キャラクター/装備・持ち物/スキル/クエスト/マップ/ソーシャル/取引所/ランキング/お知らせ/設定）、C=キャラクター、K=スキル、N=マップ、チャット `/w 名前 本文` でささやき
 - スマホ（タッチ端末）: 仮想ジョイスティック・E ボタン・MENU ボタン
-- 管理者: `UPDATE users SET role='admin' WHERE email='...'` → `/api/admin/*`（docs/DEPLOY.md）
+- 管理者: `UPDATE users SET role='admin' WHERE email='...'` → `/admin.html` および `/api/admin/*`（docs/DEPLOY.md）
 - E2E: `cd client && node e2e/phase10.mjs`（3ブラウザ、約3分）。負荷試験: docs/LOAD_TEST.md
 

@@ -1,7 +1,7 @@
 # デプロイ / 運用手順（PHASE 10 リリース準備）
 
 > **未実施・未検証の項目を含みます。** 開発箱には Docker が無く、外部ホスティング・ドメイン・TLS 証明書も用意していません（費用・アカウント作成が必要なため、オーナー判断待ち）。
-> 検証済み: `npm run build` と `NODE_ENV=production` での同一オリジン配信（下記「本番ビルド確認」）。未検証: Dockerfile / docker-compose.yml / 実ホスティング。
+> 検証済み: `npm run build` と `NODE_ENV=production` での同一オリジン配信（Dockerfile 相当の staged tree 含む。docs/PROD_VERIFY.md）。未検証: 実際の `docker build` / `docker compose up`（箱にコンテナランタイムが無い）、実ホスティング。
 
 ## 構成
 - 1 プロセスの Node サーバー（Express API `/api/*` + Colyseus WebSocket + `client/dist` 静的配信）と PostgreSQL 17。
@@ -15,8 +15,10 @@
 4. `NODE_ENV=production node server/dist/index.js`（systemd 等で常駐）。`/api/status` で死活確認。
 5. プロキシで `https://<ドメイン>` → `http://127.0.0.1:2567`（WebSocket Upgrade を通す）。
 
-## Docker（未検証）
+## Docker（イメージそのものは未検証）
 `DB_PASSWORD=... ALLOWED_ORIGINS=https://<ドメイン> docker compose up -d --build`。起動時にマイグレーションを実行してからサーバーを起動する。
+この開発箱では Docker / Podman / runc が無く、apt もプロキシ障害で入れられないため、compose 自体は実行していない。
+代わりに `scripts/verify-prod.sh` で最終イメージと同じファイル一式を組み立て、`npm ci --omit=dev`、全11本のマイグレーション、compose 相当の環境変数で `NODE_ENV=production` 起動まで確認した（既定パスワード拒否、`/api/status`、`index.html` / `admin.html`、HSTS、本番のメール確認ゲート）。詳細は docs/PROD_VERIFY.md。
 
 ## 管理者 / GM の設定
 ロールは DB の `users.role`（`player` / `gm` / `admin`）のみで決まる（クライアントからは変更不可）。
@@ -33,7 +35,7 @@ UPDATE users SET role='admin' WHERE email='you@example.com';
 | POST | /api/admin/maintenance {on, message} | admin | メンテナンス切替（一般プレイヤーの API・ログイン・入室を 503） |
 | POST | /api/admin/ban {name, ban} | admin | 利用停止/解除（停止時は全セッション失効・切断） |
 | POST | /api/admin/grant {name, itemId, qty, grantId} | admin | アイテム補填（grantId で冪等） |
-管理画面 UI は未実装（API のみ）。
+管理画面 UI はスタッフ専用の `/admin.html`（メンテ切替・お知らせ・ミュート/BAN・アイテム補填・監査ログ）。E2E `client/e2e/admin.mjs` 10/10。
 
 ## バックアップ
 `pg_dump -Fc astral > astral_$(date +%F).dump`、復旧は `pg_restore -d astral --clean`。README の「バックアップ / 復旧」参照。

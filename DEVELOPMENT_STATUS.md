@@ -90,7 +90,7 @@
 - 修正: BUG-020（レベルアップ演出中に「戻る」を押すと無反応）
 - テスト: shared 57 / server 73（phase8-dungeon 10件）全通過、E2E phase8 36/36（3ブラウザ同時・切断/再接続含む）、回帰 phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27
 - スクショ: docs/screenshots/phase8-*.png（entrance, entry-confirm, dungeon-f1, party-battle-wait, party-battle-3players, party-victory, chest, floor2-after, boss-floor, boss-battle, boss-phase, reconnect-battle, boss-victory, clear-reward, back-world）
-- 制約（隠さず）: ダンジョンは5種中「古代地下遺跡」1種のみ。ダンジョン内は1画面の部屋表示で歩行移動なし（パネル操作）。戦闘背景は草原画像を流用、ボスはゴブリン画像の流用（専用アート未作成）。E2E はテスト用にステータスをDBで増強（バランス検証ではない）
+- 制約（当時）: 公開時点では「古代地下遺跡」のみ・1画面表示・ボス/背景は流用だった。2026-11-12 追記で5種すべて歩行マップ＋専用アートに更新（下記「残課題の消化」）。E2E はテスト用にステータスをDBで増強（バランス検証ではない）
 
 ## PHASE 9 経済・ギルド・ランキング（2026-11-12）完了（テスト通過）
 - プレイヤー市場（取引所 [B]、アステリア内のみ）: 出品（数量・合計価格1〜9,999,999G・期間1/24/72時間、同時10件まで）、検索/購入、取消、期限切れ回収、自分の出品状況・購入履歴
@@ -101,7 +101,7 @@
 - 修正: BUG-021（取引所でボタン操作後に Esc で閉じられない）
 - テスト: shared 57 / server 82（phase9-economy 9件）全通過、E2E phase9 24/24（2ブラウザ、UIで出品→検索→購入、履歴、取消、ギルド役職/譲渡/解散、ランキング）、phase7 27/27 回帰
 - スクショ: docs/screenshots/phase9-market-sell.png / phase9-market-browse.png / phase9-market-confirm.png / phase9-market-bought.png / phase9-market-history.png / phase9-guild-roles.png / phase9-ranking.png
-- 未実装（隠さず）: 装備の修理（耐久度の仕組みが無い）、ギルドレベル/ギルド倉庫、市場の価格履歴グラフ、取引所NPCの配置（キー操作で開く）
+- 当時未実装だった修理・ギルド倉庫・価格履歴は 2026-11-12 に実装（下記）。残: 取引所NPCの配置（キー操作 [B] で開く）、価格のグラフ表示（履歴APIと出品履歴UIはある）
 
 ## PHASE 10 UI・サウンド・セキュリティ・負荷試験・公開準備（2026-11-12）完了（テスト通過）
 - メニュー [M]／HUD「メニュー」ボタン: キャラクター（全ステータス）・装備/持ち物・スキル（職業スキル詳細）・クエスト・マップ（ミニマップ: 自分/NPC/出入口/ダンジョン）・フレンド/パーティー/ギルド・取引所・ランキング・お知らせ・設定。C/K/N の直接キー
@@ -109,11 +109,25 @@
 - チャット: ウィスパー `/w 名前 本文`（[ささやき] 表示、オフライン/存在しない/ブロック時は日本語エラー）、ブロック/解除（ソーシャルパネル、ブロック中一覧）、発言制限の永続化（chat_mutes、再起動後も有効、制限中表示）
 - 運用: メンテナンスモード（一般ユーザーのAPI/ログイン/入室を拒否、スタッフ可、オンライン全員に通知、タイトル画面にバナー）、お知らせ（タイトル画面・メニュー・作成時に全員通知）、監査ログ（ログイン成功/失敗・管理操作）、管理API（status/logs/maintenance/announcements/mute/ban/grant、ロールは DB のみ）
 - セキュリティ: CSP 等のヘッダ、本番 HSTS、API no-store、WS メッセージ上限・Origin 検査、既定DBパスワードでの本番起動拒否、SQLインジェクション/不正JSON/巨大ボディ/権限昇格のテスト
-- 外見反映（BUG-008 一部）: 髪色・肌色・体型を自分/他プレイヤー/戦闘/ダンジョンで反映。石畳のシームレス化（BUG-009）、BUG-019 修正確認
+- 外見反映（BUG-008）: 髪色・肌色・体型・髪型を自分/他プレイヤー/戦闘/ダンジョンで反映（魔法使いの髪はフード開口の内側）。石畳のシームレス化（BUG-009）、BUG-019 修正確認
 - スマホ: タッチ端末で仮想ジョイスティック（8方向）・E・MENU ボタン、狭い画面用のレイアウト。パネル/戦闘中はパッドを隠す
 - 負荷試験: 1プロセスで 50 / 100 同時接続、遅延 p99 64ms / 67ms、取りこぼし・補正・エラー 0（docs/LOAD_TEST.md）
-- 公開準備: .env.example 更新、docs/DEPLOY.md、Dockerfile / docker-compose.yml（**未検証**）、本番ビルドの同一オリジン配信を prod-smoke E2E で確認
-- テスト: shared 57/57、server 96/96（phase10-security-ops 14件）、E2E phase10 34/34、prod-smoke 3/3、回帰 E2E phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27・phase8 36/36・phase9 24/24（phase8 は1回目にボス戦が長時間化し3件FAIL→再実行で合格、BUG-023 観察中）
+- 公開準備: .env.example 更新、docs/DEPLOY.md、Dockerfile / docker-compose.yml（コンテナ実行は未検証、等価な本番起動は docs/PROD_VERIFY.md）、本番ビルドの同一オリジン配信を prod-smoke E2E で確認
+- テスト（公開時点）: 当時 shared 57 / server 96、E2E phase2〜10。最新の全回帰は下記「残課題の消化」
 - スクショ: docs/screenshots/phase10-title-maintenance / appearance / cobble / menu / map / settings / whisper / block / maintenance-notice / mobile / mobile-menu / production-build（.png）
-- 未実装・制約（隠さず）: 髪型の反映、魔法使いの髪色、管理画面UI（APIのみ）、Docker/実ホスティング/TLS は未検証（費用・アカウントが必要なため未実施）、混合負荷・複数プロセス構成は未試験、サウンドの音質は人の耳で未確認、パスワード再設定/メール確認は未実装
+- 当時未実装だった管理画面・混合負荷・認証メール・髪型は 2026-11-12 に実装。残る制約は下記。
 
+
+## 残課題の消化（2026-11-12）完了（テスト通過、制約は明記）
+- BUG-023: 切断後に `battleReady` が落ちた席を毎ターン20秒待っていたのが6分化の原因。待機を `online && battleReady` に変更。phase8 E2E 36/36（ボス戦 51秒）
+- BUG-008: 髪型（標準/ロング/ポニーテール/ツンツン、魔法使いは前髪）とフード内の髪色。`scripts/test-look.mjs` 11/11
+- 管理画面 `/admin.html`: メンテ・お知らせ・ミュート/BAN・補填・監査ログ。E2E admin 10/10。スクショ admin-status / admin-news / admin-logs
+- 歩行ダンジョン: 36×28 の2×2部屋＋通路マップ（`scripts/gen-dungeon-maps.py`）。追加4種（忘れられた鉱山 / 闇の森林 / 砂漠の神殿 / 星晶の塔）と各ボス・戦闘背景。unit phase11-dungeons 4/4。スクショ phase8-dungeon-f1（歩行可能な遺跡）、dungeon-entrance-{forgotten-mine,dark-forest,desert-temple,star-tower}.png（草原の入口。鉱山と星晶の塔は近接配置のため同一画面に両方写る）
+- パスワード再設定・メール確認: 開発用メールボックス（MAIL_DIR、SMTPなし）。本番または `EMAIL_CONFIRM=1` では未確認ログインを拒否。phase11-auth-mail 2/2
+- 装備修理（耐久50、2G/ポイント）、ギルドレベル/倉庫、市場の価格履歴。phase11-shortfalls 6/6（交差購入のデッドロック回帰を含む）
+- 市場交差購入のデッドロック（40P01）を `buyListing` の行ロック順と `tx()` 再試行で修正
+- 混合負荷: `server/scripts/load-mixed.mjs` 12クライアント25秒、戦闘3574 / チャット28 / 出品107 / 購入106、エラー0（docs/LOAD_TEST.md）
+- 音声: `scripts/audio-verify.mjs` が BGM9+SFX8 を WAV 化しピーク/RMS/クリップ/無音/ループ継ぎ目を測定。クリップなし・ループクリックなし。**人の耳による試聴は未実施**
+- Docker: コンテナランタイムが無く compose は未実行（理由は docs/PROD_VERIFY.md）。Dockerfile 相当の staged tree + compose 環境での本番起動は確認
+- 全回帰（2026-11-12 Asia/Tokyo）: shared 57/57、server 110/110、look 11/11、E2E phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27・phase8 36/36・phase9 24/24・phase10 34/34・admin 10/10
+- 残（隠さず）: 実 Docker/compose 実行、実ホスティング/TLS（費用・アカウント待ち）、複数プロセス presence、サウンドの人による試聴、斜めフレーム、建物内部（BUG-003）、価格履歴のグラフUI、取引所NPC配置

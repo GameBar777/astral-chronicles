@@ -68,13 +68,18 @@
 - 外部音源ファイルを使わず、WebAudio でブラウザ内合成したオリジナル曲/効果音（`client/src/audio.ts`）。ライセンス問題なし・アセット0KB
 - BGM: title / town / meadow / battle / boss / dungeon / victory / defeat（forest は未使用マップ用に定義のみ）。効果音: 攻撃・魔法・被弾・回復・レベルアップ・アイテム・強化・メニュー
 - ブラウザの自動再生制限のため最初のクリック/キー入力で AudioContext を再開。音量（BGM/SE）とミュートは localStorage `astral.audio`
-- 制約: チップチューン風の簡易合成。実音質の確認は人の耳で未実施（E2E は選曲状態と設定保存のみ検証）
+- 制約: チップチューン風の簡易合成。`scripts/audio-verify.mjs` でピーク/RMS/クリップ/無音/ループ継ぎ目を測定（クリップなし、ループクリックなし、既定音量はピーク約 -20〜-30dBFS でヘッドルームあり）。**人の耳による試聴は未実施**
 ## TD-019 運用・セキュリティ・デプロイ（PHASE 10）
 - migration 009: audit_logs / server_settings(maintenance) / announcements / chat_mutes / character_blocks
-- ロールは users.role（player/gm/admin）を毎リクエスト DB から解決。管理 API `/api/admin/*` はロール検査＋レート制限＋監査ログ。管理画面 UI は作らず API のみ
+- ロールは users.role（player/gm/admin）を毎リクエスト DB から解決。管理 API `/api/admin/*` はロール検査＋レート制限＋監査ログ。スタッフ専用 UI は `/admin.html`（`client/src/admin.ts`）
 - メンテナンス: 一般ユーザーの API(503)・ログイン・ルーム入室を拒否、スタッフは通過。値は2秒キャッシュ。切替時にオンライン全員へ system_notice
 - BAN: 全セッション失効＋接続中なら切断。補填付与は grantId で冪等（transactions 一意キー）
 - HTTP ヘッダ: CSP（script-src 'self'、connect-src 'self' ws: wss:）、nosniff、X-Frame-Options DENY、Referrer-Policy no-referrer、COOP、本番のみ HSTS、/api は no-store。WS は maxPayload 16KB、ALLOWED_ORIGINS で Origin 検査、TRUST_PROXY 対応
 - 本番は1プロセスが client/dist を同一オリジン配信（クライアントは PROD ビルドで同一オリジンの WS に接続）。既定DBパスワードのままの本番起動は拒否
-- Dockerfile / docker-compose.yml は用意したが Docker が箱に無く**未検証**。本番ビルドの同一オリジン配信は `client/e2e/prod-smoke.mjs` で検証済
+- Dockerfile / docker-compose.yml は用意したが、この箱ではコンテナランタイムが無く compose は未実行。Dockerfile 相当の成果物と compose 環境での本番起動は docs/PROD_VERIFY.md。同一オリジン配信は `client/e2e/prod-smoke.mjs` でも検証済
 - チャット: ウィスパー（/w 名前 本文、相手がオンライン＆未ブロック時のみ）、ブロック（双方向の申請拒否・発言非表示・フレンド解除）、ミュートは chat_mutes に永続化（スパム自動ミュート/GMミュート、再起動後も有効）
+
+## TD-020 残課題消化（2026-11-12）
+- ダンジョン位置は `dungeon_members.pos_*`（characters.map_id はワールド用。インスタンスを WorldRoom に混ぜない）
+- メール確認/パスワード再設定は `email_tokens` + 開発用 MAIL_DIR（SMTP なし）。本番では register 応答に raw token を出さず、未確認ログインは email_unverified
+- 市場の同時交差購入は買い手・売り手を `id` 順で行ロックし、`tx()` は 40P01/40001 を最大3回再試行

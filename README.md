@@ -38,8 +38,8 @@ python3 scripts/cut-sprites.py      # assets/raw/*.jpg（AI生成原画）→ cl
 `scripts/db-backup.sh` → `backups/*.dump`。復旧: `pg_restore -h 127.0.0.1 -p 5433 -U astral -d astral --clean <file>`
 
 ## デプロイ
-`docs/DEPLOY.md` 参照（本番ビルド・同一オリジン配信・管理者設定・管理UI `/admin.html`）。Dockerfile / docker-compose.yml のコンテナ実行はこの箱では未検証（docs/PROD_VERIFY.md）。
-本番相当の確認: `bash scripts/verify-prod.sh`（または `npm run build` → 既定以外のパスワードで `NODE_ENV=production node server/dist/index.js`）。
+`docs/DEPLOY.md` 参照（本番ビルド・同一オリジン配信・管理者設定・管理UI `/admin.html`、Render Blueprint）。Dockerfile / docker-compose.yml のコンテナ実行はこの箱では未検証（docs/PROD_VERIFY.md）。`render.yaml` は無料枠向けに用意済みだが、**Render へのデプロイ自体は未実施**。
+本番相当の確認: `bash scripts/verify-prod.sh`（または `npm run build` → 既定以外のパスワードで `NODE_ENV=production PORT=... node server/dist/index.js`。起動時に migrate。プレイテストでは `REQUIRE_EMAIL_CONFIRMATION=false`）。
 音声の客観検証: `node scripts/audio-verify.mjs`。混合負荷: `npx tsx server/scripts/load-mixed.mjs`（docs/LOAD_TEST.md）。
 
 ## API（PHASE 2）

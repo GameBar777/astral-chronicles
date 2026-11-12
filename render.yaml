@@ -1,0 +1,37 @@
+# ASTRAL CHRONICLES — Render Blueprint (free-tier playtest).
+# Not yet deployed. Free web services sleep after 15 minutes of idle traffic
+# (including WebSockets) and take ~1 minute to wake. Free Postgres expires 30 days
+# after creation (1 GB, one free DB per workspace, no backups).
+# There is no outbound SMTP; REQUIRE_EMAIL_CONFIRMATION is off so sign-up works.
+services:
+  - type: web
+    name: astral-chronicles
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node server/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: astral-chronicles-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: REQUIRE_EMAIL_CONFIRMATION
+        value: "false"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: "1"
+
+databases:
+  - name: astral-chronicles-db
+    plan: free
+    databaseName: astral
+    user: astral
+    postgresMajorVersion: "17"

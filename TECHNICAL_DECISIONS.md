@@ -83,3 +83,12 @@
 - ダンジョン位置は `dungeon_members.pos_*`（characters.map_id はワールド用。インスタンスを WorldRoom に混ぜない）
 - メール確認/パスワード再設定は `email_tokens` + 開発用 MAIL_DIR（SMTP なし）。本番では register 応答に raw token を出さず、未確認ログインは email_unverified
 - 市場の同時交差購入は買い手・売り手を `id` 順で行ロックし、`tx()` は 40P01/40001 を最大3回再試行
+
+## TD-021 Render 無料枠向けの単一サービス公開（2026-11-12）
+- ゲームは 1 プロセスの Node サーバー（API + Colyseus WS + `client/dist`）。Render の free Web Service 1 つ + free Postgres 1 つで足りる。`render.yaml` に定義したが、**アカウント作成とデプロイは未実施**
+- `PORT` を優先（Render が注入）、`BIND_HOST` 既定 `0.0.0.0`。起動時に migrate。SPA フォールバックは `/api` `/health` `/matchmake` を除外
+- Postgres SSL はホストがローカルでなければ本番で有効。Render の connectionString は通常 `sslmode=require` を含む
+- メール確認は本番既定 ON。送信はローカル MAIL_DIR のみ（SMTP なし）なので、このプレイテスト Blueprint では `REQUIRE_EMAIL_CONFIRMATION=false`。本番で確認を戻すときはこの変数を外すか `true` にする
+- `SESSION_SECRET` は Blueprint が生成するが、セッションは SHA-256 ハッシュした不透明トークンを DB に置く方式のまま（TD-003）。署名クッキーには使っていない
+- ALLOWED_ORIGINS が空のとき、Render の `RENDER_EXTERNAL_URL` があればそのオリジンだけを WS に許可する
+- 無料枠: Web は 15 分アイドルでスリープ、Postgres は 30 日で期限切れ。本番利用には不向き

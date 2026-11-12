@@ -23,5 +23,5 @@ COPY --from=build /app/client/dist client/dist
 RUN npm ci --omit=dev --workspace @astral/server --workspace @astral/shared --include-workspace-root
 USER node
 EXPOSE 2567
-# run migrations, then the server
-CMD ["sh", "-c", "node server/dist/db/migrate.js && node server/dist/index.js"]
+# migrations run on process start (server/src/index.ts)
+CMD ["node", "server/dist/index.js"]

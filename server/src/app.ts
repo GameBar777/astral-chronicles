@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
+import { allowedOrigins, SPA_FALLBACK } from './config.js';
 import { pool } from './db/pool.js';
 import { apiRouter } from './http/api.js';
 import { WorldRoom } from './rooms/WorldRoom.js';
@@ -21,14 +22,15 @@ export function createGameServer(opts: { authLimit?: number; createLimit?: numbe
   const dist = process.env.CLIENT_DIST ?? fileURLToPath(new URL('../../client/dist', import.meta.url));
   if (process.env.NODE_ENV === 'production' && existsSync(dist)) {
     app.use(express.static(dist, { index: false, maxAge: '7d', setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); } }));
-    app.get(/^\/(?!api|health).*/, (_q, res) => res.sendFile(path.join(dist, 'index.html')));
+    // exclude /api, /health, /matchmake (Colyseus) from the SPA fallback
+    app.get(SPA_FALLBACK, (_q, res) => res.sendFile(path.join(dist, 'index.html')));
   }
   app.get('/health', async (_req, res) => {
     try { await pool.query('SELECT 1'); res.json({ ok: true, db: 'up' }); }
     catch { res.status(503).json({ ok: false, db: 'down' }); }
   });
   const http = createServer(app);
-  const origins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const origins = allowedOrigins();
   const gameServer = new Server({ transport: new WebSocketTransport({ server: http, maxPayload: 16 * 1024,
     verifyClient: (info: { origin?: string }, cb: (ok: boolean, code?: number) => void) => cb(!origins.length || origins.includes(info.origin ?? ''), 403) }) });
   gameServer.define('world', WorldRoom).filterBy(['mapId']); // one shared room per map

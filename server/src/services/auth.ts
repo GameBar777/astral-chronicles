@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { pool } from '../db/pool.js';
-import { config } from '../config.js';
+import { config, emailConfirmationRequired } from '../config.js';
 export const SESSION_TTL_MS = 7 * 24 * 3600 * 1000;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
@@ -44,7 +44,7 @@ export async function resolveSession(token: string | undefined) {
 export async function logout(sessionId: string) { await pool.query('UPDATE sessions SET revoked_at=now() WHERE id=$1', [sessionId]); }
 
 import { sendMail, hashToken as mailHash, newToken, lastMail } from './mail.js';
-const confirmRequired = () => process.env.NODE_ENV === 'production' || process.env.EMAIL_CONFIRM === '1';
+const confirmRequired = () => emailConfirmationRequired();
 const TOKEN_TTL_MS = { confirm: 48 * 3600 * 1000, reset: 2 * 3600 * 1000 };
 async function issueToken(userId: string, kind: 'confirm' | 'reset', email: string, subject: string, text: (t: string) => string) {
   const raw = newToken();

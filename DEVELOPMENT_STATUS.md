@@ -130,4 +130,13 @@
 - 音声: `scripts/audio-verify.mjs` が BGM9+SFX8 を WAV 化しピーク/RMS/クリップ/無音/ループ継ぎ目を測定。クリップなし・ループクリックなし。**人の耳による試聴は未実施**
 - Docker: コンテナランタイムが無く compose は未実行（理由は docs/PROD_VERIFY.md）。Dockerfile 相当の staged tree + compose 環境での本番起動は確認
 - 全回帰（2026-11-12 Asia/Tokyo）: shared 57/57、server 110/110、look 11/11、E2E phase2 19/19・phase3 20/20・phase4 16/16・phase5 16/16・phase6 11/11・phase7 27/27・phase8 36/36・phase9 24/24・phase10 34/34・admin 10/10
-- 残（隠さず）: 実 Docker/compose 実行、実ホスティング/TLS（費用・アカウント待ち）、複数プロセス presence、サウンドの人による試聴、斜めフレーム、建物内部（BUG-003）、価格履歴のグラフUI、取引所NPC配置
+- 残（隠さず）: 実 Docker/compose 実行、**実ホスティングは未デプロイ**（Render 向け準備は下記。アカウント作成と Blueprint 適用は未実施）、複数プロセス presence、サウンドの人による試聴、斜めフレーム、建物内部（BUG-003）、価格履歴のグラフUI、取引所NPC配置
+
+## Render 向け公開準備（2026-11-12 Asia/Tokyo）— 準備完了・未デプロイ
+- 単一 Node プロセスが `process.env.PORT`（未設定時は `SERVER_PORT` / 2567）で `0.0.0.0` にバインドし、`client/dist` 静的配信 + `/api` + `/health` + Colyseus `/matchmake` + WebSocket を同一オリジンで提供。起動時にマイグレーションを適用（冪等）
+- `DATABASE_URL` の TLS: リモート／`sslmode=require` では SSL を有効化（既定は `rejectUnauthorized: false`）。ローカル（127.0.0.1 等）の本番相当起動では SSL しない。`DATABASE_SSL` で強制可
+- メール確認: 本番の既定は必須のまま。SMTP は未実装のため、プレイテストでは `REQUIRE_EMAIL_CONFIRMATION=false` で登録直後にログインできる（ドキュメントに明記）。`EMAIL_CONFIRM=1` は従来どおり確認を強制
+- `render.yaml` Blueprint: free Web Service（`npm ci && npm run build` / `node server/dist/index.js` / `healthCheckPath: /health`）+ free Postgres 17（`DATABASE_URL` を connectionString から配線）。`SESSION_SECRET` は `generateValue: true`（セッション自体は従来どおり DB の不透明トークンで、この値は未使用）。`TRUST_PROXY=1`、`NODE_VERSION=22`
+- ローカル検証（本番ビルド、専用 DB `astral_rendertest`、`PORT=2680`、`REQUIRE_EMAIL_CONFIRMATION=false`）: 起動時に migration 001–011 を適用、`GET /health` 200 `{ok:true,db:up}`、`GET /` と `/admin.html` を配信、`GET /matchmake` は index.html を返さない、登録 201（`devConfirmToken` なし）→ 未確認のままログイン 200、E2E phase2 19/19。unit は shared 57/57・server 122/122（deploy-config 12 件を含む）
+- **未実施**: Render アカウント作成、Blueprint の適用、実 URL での公開。GitHub リポジトリへの push はこの準備コミットと同時に行う
+- 無料枠の制約（docs/DEPLOY.md）: Web は 15 分アイドルでスリープ（復帰に約 1 分、WS も切れる）、free Postgres は作成から 30 日で期限（1GB・ワークスペースあたり 1 つ・バックアップなし）、無料 Web は 512MB のためビルドがメモリ不足になる可能性あり

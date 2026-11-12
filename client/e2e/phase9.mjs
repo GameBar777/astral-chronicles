@@ -56,7 +56,7 @@ ok('A received 190G (5% fee)', (await gold(A)) === a0 + 190, `${a0} -> ${await g
 ok('seller got a system chat notice', await waitFor(async () => (await A.p.textContent('#chat')).includes('売れました')));
 await shot(B, 'phase9-market-bought.png');
 // double-click resistance: same listing again is closed
-const again = await B.p.evaluate(async ([cid]) => { const r = await fetch('/api/market', { headers: { authorization: 'Bearer ' + sessionStorage.getItem('astral.token') } }); return (await r.json()).listings.length; }, [B.id]);
+const again = await B.p.evaluate(async () => { const r = await fetch('/api/market?search=' + encodeURIComponent('鉄鉱石'), { headers: { authorization: 'Bearer ' + sessionStorage.getItem('astral.token') } }); return (await r.json()).listings.length; });
 ok('sold listing no longer browsable', again === 0, String(again));
 
 // --- A: second listing, cancel it from history tab

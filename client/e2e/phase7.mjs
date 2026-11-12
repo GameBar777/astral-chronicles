@@ -24,7 +24,7 @@ const waitFor = async (fn, ms = 8000) => { const t = Date.now(); while (Date.now
 const status = (p) => p.evaluate(() => window.__astral.scene.getScene('World').presence?.status);
 const tab = (P, t) => P.p.click(`#chat .tabs button[data-t="${t}"]`);
 const logText = (P) => P.p.textContent('#chat .log');
-const say = async (P, t, text) => { await tab(P, t); await P.p.fill('#chat input', text); await P.p.press('#chat input', 'Enter'); };
+const say = async (P, t, text) => { if (await P.p.isVisible('#social')) await P.p.click('#social .x').catch(() => P.p.keyboard.press('Escape')); await tab(P, t); await P.p.fill('#chat input', text); await P.p.press('#chat input', 'Enter'); };
 const panel = async (P) => { if (!(await P.p.isVisible('#social'))) { await P.p.click('canvas'); await P.p.keyboard.press('o'); } await P.p.waitForSelector('#social .p4-body'); };
 const btn = (P, a, txt) => P.p.click(txt ? `#social button[data-a="${a}"]:has-text("${txt}")` : `#social button[data-a="${a}"]`);
 const socialTxt = (P) => P.p.textContent('#social');
@@ -78,6 +78,7 @@ await shot(A, 'phase7-chat-guild.png');
 
 // --- Leader promotion, then System tab read-only
 await btn(A, 'party/leader');
+await panel(B);
 ok('B becomes leader (★ shown on B)', await waitFor(async () => B.p.evaluate((n) => [...document.querySelectorAll('#social .s-row')].some((r) => r.textContent.includes(n) && r.querySelector('.s-lead')), B.name)));
 await tab(A, 'System'); ok('System tab input is disabled', await A.p.isDisabled('#chat input'));
 

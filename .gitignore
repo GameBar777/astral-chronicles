@@ -11,3 +11,4 @@ docs/audio-analysis/*.wav
 
 # local playtest secrets — never commit
 .playtest-admin.txt
+.neon-db-url
